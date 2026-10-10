@@ -182,7 +182,7 @@ textarea,input[type=text]{width:100%;font:15px/1.5 var(--font-sans);color:var(--
 button{font:inherit;font-size:14px;padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);color:var(--ink-2);cursor:pointer;margin:8px 6px 0 0}
 button:hover{color:var(--ink);border-color:var(--ink-3)}button.pri{background:var(--head-bg);border-color:var(--head-bg);color:var(--head-fg)}.warn{color:var(--warn);font-size:12px;margin-top:6px}
 .post{margin:0 0 8px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--fill);white-space:pre-wrap}.post.agent{border-left:3px solid var(--accent)}
-.post .mut{font-size:12px}details summary{cursor:pointer}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
+.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
 .msg{margin:8px 0;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--paper);white-space:pre-wrap}
 header button{margin-top:0}
 """
@@ -284,11 +284,18 @@ def ticket_page(mid):
     panels.append(X.panel(chr(ord('A') + len(panels)), 'Thread', thread_html(mid), meta='tell the agent what to change', wide=True))
     return page(mid, f'<header><a href="/">← home</a><span style="margin-left:auto"></span><button onclick="theme()" title="light / dark">◐ theme</button></header>{head}<div class="sheet">{"".join(panels)}</div>')
 
+def blocked(m):
+    subs = [x for x in m.get('subs') or [] if x.get('statusType') not in ('completed', 'canceled')]
+    return bool(subs) and all(x.get('blockedBy') for x in subs)
+
 def row(m, items):
     done, n = progress(m)
     return (f'<tr><td><a href="{e(m.get("url"))}" title="open in Linear">{e(m["id"])}</a> <a class="t" href="/t/{e(m["id"])}">{e(m.get("title"))}</a></td>'
-            f'<td><span class="st">{e(m.get("status"))}</span></td><td class="mut">{f"{done}/{n} sub-issues" if n else ""}</td>'
-            f'<td class="warn">{"needs you: " + e(items[0].get("title")) if items else ""}</td></tr>')
+            f'<td>{st_badge(m)}{" <span class=chip>⛔ blocked</span>" if blocked(m) else ""}</td><td class="mut">{f"{done}/{n} sub-issues" if n else ""}</td>'
+            f'<td class="warn">{"needs you: " + e(items[0].get("title")) if items else e(m.get("next") or "")}</td></tr>')
+
+def section(title, ms, by, note=''):
+    return f'<section class="card"><h2>{e(title)} <span class="mut">{note or len(ms)}</span></h2><table>{"".join(row(m, by(m["id"])) for m in ms)}</table></section>' if ms else ''
 
 def home(everything=False):
     st, items = view()
@@ -304,8 +311,10 @@ def home(everything=False):
             f'<button onclick="api(\'/api/sync\',{{}},this)">Sync now</button><a href="/sessions">Sessions</a><button onclick="theme()" title="light / dark">◐ theme</button></header>')
     started = [m for m in masters if kind_of(m) == 'started']
     if not st: return page('ticketsmith', head + '<p class="lead">No sync yet. The first one starts within a minute; this page refreshes when it lands.</p>')
+    active = [m for m in masters if kind_of(m) in ('started', 'unstarted')]
+    ready = [m for m in active if m.get('next') and not by(m['id']) and not blocked(m)]
     summary = (f'{len(open_items)} thing{"s" if len(open_items) != 1 else ""} need{"s" if len(open_items) == 1 else ""} you. ' if open_items else 'Nothing needs you. ') \
-              + f'{len(started)} ticket{"s" if len(started) != 1 else ""} in progress.'
+              + f'{len(ready)} ready, {len(started)} in progress.'
     body = [head, f'<p class="lead">{summary}</p>']
     if open_items:
         urls = {m['id']: m.get('url') for m in masters}
@@ -316,18 +325,18 @@ def home(everything=False):
                     + f'</div><a class="go" href="/t/{e(card)}#{e(i["id"])}">open →</a></li>')
         li = ''.join(needs_row(i) for i in open_items)
         body.append(f'<section class="card needs"><h2>Needs you</h2><ul class="rows">{li}</ul></section>')
-    if started:
-        body.append(f'<section class="card"><h2>In progress</h2><table>{"".join(row(m, by(m["id"])) for m in started)}</table></section>')
-    if everything:
-        order = {'started': 0, 'unstarted': 1, 'triage': 2, 'backlog': 3, 'other': 4}
-        rest = sorted((m for m in masters if kind_of(m) != 'started'), key=lambda m: order.get(kind_of(m), 4))
-        body.append(f'<section class="card"><h2>Everything else</h2><table>{"".join(row(m, by(m["id"])) for m in rest)}</table></section>')
-        ign = st.get('ignored') or [] if st.get('ignored_day') == time.strftime('%Y-%m-%d') else []
-        if ign:
-            body.append(f'<details class="card"><summary class="mut">Ignored today ({len(ign)})</summary><ul>'
-                        + ''.join(f'<li><a href="{e(x.get("url"))}">{e(x.get("source"))}</a> {e(x.get("snippet"))}</li>' for x in ign) + '</ul></details>')
-    else:
-        body.append(f'<p><a href="/all">All tickets ({len(masters)}) →</a></p>')
+    order = {'started': 0, 'unstarted': 1}
+    rest_active = sorted((m for m in active if m not in ready), key=lambda m: (order.get(kind_of(m), 2), not blocked(m)))
+    body.append(section('Ready', ready, by))
+    body.append(section('In progress / Todo / blocked', rest_active, by))
+    rest = sorted((m for m in masters if m not in active), key=lambda m: {'triage': 0, 'backlog': 1}.get(kind_of(m), 2))
+    if rest:
+        body.append(f'<details class="card"{" open" if everything else ""}><summary>Everything else / backlog <span class="mut">{len(rest)}</span></summary>'
+                    f'<table>{"".join(row(m, by(m["id"])) for m in rest)}</table></details>')
+    ign = st.get('ignored') or [] if st.get('ignored_day') == time.strftime('%Y-%m-%d') else []
+    if ign:
+        body.append(f'<details class="card"><summary class="mut">Ignored today ({len(ign)})</summary><ul>'
+                    + ''.join(f'<li><a href="{e(x.get("url"))}">{e(x.get("source"))}</a> {e(x.get("snippet"))}</li>' for x in ign) + '</ul></details>')
     return page('ticketsmith', ''.join(body))
 
 # ---------- sessions (headless runs, resumable) ----------
@@ -438,13 +447,16 @@ def test():
                   {'id': 'i-4', 'master': 'ENG-1', 'kind': 'reply', 'title': 'style', 'draft': 'Thanks! Let me know if this works.', 'status': 'open', 'target': {'type': 'copy'}},
                   {'id': 'i-3', 'master': 'ENG-1', 'kind': 'reply', 'title': 'done one', 'status': 'posted'}]}))
     st = json.loads((HOME / 'state.json').read_text())
-    st['masters'] += [{'id': 'ENG-7', 'title': 'Someday', 'status': 'Backlog'}, {'id': 'ENG-8', 'title': 'Now', 'status': 'In Progress'}]
+    st['masters'] += [{'id': 'ENG-7', 'title': 'Someday', 'status': 'Backlog'}, {'id': 'ENG-8', 'title': 'Now', 'status': 'In Progress', 'next': 'write the test'},
+                      {'id': 'ENG-9', 'title': 'Stuck', 'status': 'Todo', 'subs': [{'id': 'ENG-10', 'statusType': 'unstarted', 'blockedBy': ['ENG-2']}]}]
     (HOME / 'state.json').write_text(json.dumps(st))
     h = home()
-    assert 'ENG-8' in h and 'ENG-7' not in h and 'ENG-7' in home(everything=True), 'home shows in-progress only'
-    h = home()
-    assert 'Needs you' in h and 'Patrick asks &lt;b&gt;' in h and 'All tickets (3)' in h and 'done one' not in h, h
-    assert '3 things need you. 2 tickets in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
+    assert h.index('Needs you') < h.index('Ready') < h.index('In progress / Todo / blocked') < h.index('Everything else'), 'four sections in order'
+    ready = h[h.index('Ready'):h.index('In progress / Todo')]
+    assert 'ENG-8' in ready and 'write the test' in ready and 'ENG-1' not in ready and 'ENG-9' not in ready, 'ready = next known, nothing needs you, not blocked'
+    assert '⛔ blocked' in h[h.index('In progress / Todo'):h.index('Everything else')] and 'ENG-7' in h[h.index('Everything else'):]
+    assert 'Needs you' in h and 'Patrick asks &lt;b&gt;' in h and 'done one' not in h, h
+    assert '3 things need you. 1 ready, 2 in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
     assert '<textarea' not in h, 'home stays calm: no drafts inline'
     t = ticket_page('ENG-1')
     assert '1 of 2 sub-issues done' in t and '⛔ after ENG-2' in t and 'Post to ENG-1' in t and '2 things need you.' in t and t.count('class="panel') == 6, t
