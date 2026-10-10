@@ -7,7 +7,7 @@ Tools: the Linear MCP (`list_issues`, `get_issue`, `list_comments`, `get_user`; 
 1. `list_issues` with `assignee: "me"`, `limit: 100`, fields `id, title, url, status, statusType, parentId, updatedAt, assignee, team`. Drop `completed` and `canceled`.
 2. An issue with a `parentId` belongs to that parent: the parent is the master. An issue with no parent is its own master.
 3. For each master: `list_issues` with `parentId: <master>` (same fields) for its subs, all assignees. `mine` is true when the sub is assigned to the owner.
-4. First time you see a master, or when its `updatedAt` moved: `get_issue` with `includeRelations: true`. Read at most 10 per sync, masters with started or todo status first; the rest catch up on later syncs (keep `goal` empty until read).
+4. `get_issue` with `includeRelations: true` for every master whose stored `goal` is empty, and for every master or sub whose `updatedAt` moved. At most 10 per sync, started and todo first; the rest catch up on later syncs. A master with an empty `goal` is unread even when nothing changed in Linear.
    - `goal`: the end goal from the description in one line.
    - `product`: the related issue whose team key is in config `product_teams` (default `PROD`).
    - `blockedBy` on subs: from `blocks` relations only.

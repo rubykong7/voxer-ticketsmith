@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
-sys.path.insert(0, str(Path(__file__).resolve().parent)); import explain as X
+sys.path.insert(0, str(Path(__file__).resolve().parent)); import explain as X; import check_draft as CD
 
 SKILL = Path(__file__).resolve().parent.parent
 HOME = Path(os.environ.get('TICKETSMITH_HOME', '~/.voxer-ticketsmith')).expanduser()
@@ -108,7 +108,7 @@ def add_post(card, text):
 # ---------- runs: one claude -p at a time ----------
 Q, RUNNING, LAST_TRY = queue.Queue(), {}, {'sync': 0.0}
 
-def prompt(cmd): return f'Use the voxer-ticketsmith skill. Command: {cmd}. Home: {HOME}.'
+def prompt(cmd): return f'Use the voxer-ticketsmith skill. Command: {cmd}. Home: {HOME}. Now: {now_iso()} (use this for every timestamp and cursor; never guess the time).'
 
 def enqueue(name, cmd, write=False):
     if name == RUNNING.get('name') or any(n == name for n, _, _ in list(Q.queue)): return 'already queued'
@@ -122,7 +122,7 @@ def lock_busy():
 
 def run(name, cmd, write):
     c = config()
-    tools = ['Skill', 'Read', 'Glob', 'Grep', f'Bash(python3 {SKILL}/scripts/check_draft.py:*)'] + c['read_tools'] + (c['write_tools'] if write else [])
+    tools = ['Skill', 'Read', 'Glob', 'Grep'] + c['read_tools'] + (c['write_tools'] if write else [])
     sid = str(uuid.uuid4())
     args = [CLAUDE, '-p', prompt(cmd), '--session-id', sid, '-n', f'ticketsmith {name}', '--model', c['model'],
             '--permission-mode', 'acceptEdits', '--disallowedTools', 'AskUserQuestion', '--allowedTools', *tools]
@@ -204,7 +204,7 @@ def item_html(i):
         if t.get('type') == 'linear_issue':
             h.append(f'<div class="mut">{"Update " + e(t.get("id")) if t.get("id") else "Create a new issue"} with: <code>{e(json.dumps(t.get("fields", {})))}</code>. Description:</div>')
         h.append(f'<textarea id="d-{iid}" rows="{min(12, 2 + i["draft"].count(chr(10)) + len(i["draft"]) // 90)}">{e(i["draft"])}</textarea>')
-        h += [f'<div class="warn">⚠ {e(w)}</div>' for w in i.get('checks') or []]
+        h += [f'<div class="warn">⚠ {e(w)}</div>' for w in CD.check(i['draft'], CD.banned(CD.style_text()))]
         h.append(f'<button onclick="act(\'{iid}\',\'edit\',\'d-{iid}\',this)">Save edit</button>')
         if t.get('type') in ('linear_comment', 'linear_issue'):
             where = t.get('issue') or t.get('id') or 'Linear'
@@ -419,6 +419,7 @@ def test():
         'items': [{'id': 'i-1', 'master': 'ENG-1', 'kind': 'reply', 'title': 'Patrick asks <b>', 'draft': 'old', 'status': 'open',
                    'target': {'type': 'linear_comment', 'issue': 'ENG-1'}},
                   {'id': 'i-2', 'master': None, 'kind': 'question', 'title': 'Which project?', 'options': ['A', 'B'], 'status': 'open'},
+                  {'id': 'i-4', 'master': 'ENG-1', 'kind': 'reply', 'title': 'style', 'draft': 'Thanks! Let me know if this works.', 'status': 'open', 'target': {'type': 'copy'}},
                   {'id': 'i-3', 'master': 'ENG-1', 'kind': 'reply', 'title': 'done one', 'status': 'posted'}]}))
     st = json.loads((HOME / 'state.json').read_text())
     st['masters'] += [{'id': 'ENG-7', 'title': 'Someday', 'status': 'Backlog'}, {'id': 'ENG-8', 'title': 'Now', 'status': 'In Progress'}]
@@ -427,17 +428,18 @@ def test():
     assert 'ENG-8' in h and 'ENG-7' not in h and 'ENG-7' in home(everything=True), 'home shows in-progress only'
     h = home()
     assert 'Needs you' in h and 'Patrick asks &lt;b&gt;' in h and 'All tickets (3)' in h and 'done one' not in h, h
-    assert '2 things need you. 2 tickets in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
+    assert '3 things need you. 2 tickets in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
     assert '<textarea' not in h, 'home stays calm: no drafts inline'
     t = ticket_page('ENG-1')
-    assert '1 of 2 sub-issues done' in t and '⛔ after ENG-2' in t and 'Post to ENG-1' in t and '1 thing needs you.' in t and t.count('class="panel') == 6, t
+    assert '1 of 2 sub-issues done' in t and '⛔ after ENG-2' in t and 'Post to ENG-1' in t and '2 things need you.' in t and t.count('class="panel') == 6, t
+    assert '⚠ banned: &quot;Thanks&quot;' in t and '⚠ banned: &quot;Let me know if&quot;' in t, 'drafts are checked at render time'
     assert ticket_page('inbox') and 'Which project?' in ticket_page('inbox') and ticket_page('ENG-99') is None
     assert 'Sub-issues' not in ticket_page('ENG-8') and 'next sync reads' in ticket_page('ENG-8')
     assert 'Ignored today (1)' in home(everything=True) and 'Everything else' in home(everything=True)
     assert not add_inbox('i-9', 'edit', 'x') and not add_inbox('i-1', 'delete')
     assert add_inbox('i-1', 'edit', 'new text') and '>new text</textarea>' in ticket_page('ENG-1')
     add_inbox('i-2', 'resolve')
-    assert '1 thing needs you.' in home()
+    assert '2 things need you.' in home()
     add_inbox('i-1', 'post', 'final')
     assert 'posting to Linear' in ticket_page('ENG-1')
     add_post('ENG-1', 'make it shorter')

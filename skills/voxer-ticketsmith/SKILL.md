@@ -48,7 +48,6 @@ Linear holds the goal. This skill holds the how, locally, and keeps the two in s
     "draft": "text to send, or the new description for a change; null if none",
     "options": ["for questions: 2-3 suggested answers"],
     "target": {"type": "linear_comment", "issue": "ENG-8692", "parentId": "comment id to reply under, optional"},
-    "checks": ["warnings check_draft.py still reports"],
     "status": "open | posted | resolved | rejected | failed", "result": "posted URL or error",
     "created": "ISO"
   }],
@@ -63,6 +62,8 @@ Write `state.json` whole with the Write tool. Keep every field you did not chang
 
 ## Every command starts like this
 
+The prompt gives you `Now`. Use it for every timestamp. You have no clock; never guess a time.
+
 1. If `run.lock` exists and is younger than 30 minutes, stop and say a run is in progress. Otherwise write it (`{"name": "<command>", "started": "<now>"}`); delete it when you finish, also on failure.
 2. Read `config.toml` (if any), `state.json` (if any) and `inbox.jsonl` (if any).
 3. Apply the inbox in order:
@@ -74,7 +75,7 @@ Write `state.json` whole with the Write tool. Keep every field you did not chang
 
 ## sync
 
-Run hourly by the dashboard. Read-only outside the home folder. Bash is allowed only for `check_draft.py`; don't run other commands.
+Run hourly by the dashboard. Read-only outside the home folder. No Bash.
 
 1. Linear: follow `tasks/linear.md` to rebuild `masters` from the owner's open issues. For each master or sub whose `updatedAt` is newer than stored, read what changed (description, status, new comments).
 2. Sync rules between Linear and `tasks/<master>.md`:
@@ -88,8 +89,8 @@ Run hourly by the dashboard. Read-only outside the home folder. Bash is allowed 
    - Relevant to work that has no master yet: add an `unrouted` item with `master: null` and, if it is real work, a `change` item that drafts the new ticket.
    - Everything else (thanks, chat, FYI, other projects): append to `ignored` (reset the list when `ignored_day` is not today). No item.
    - Before adding an item, check `rejected` and open items. Never add the same suggestion twice.
-5. Drafts: write every draft per the skill's `style.md` (or the home `style.md` if it exists). Run `python3 <skill>/scripts/check_draft.py <file>` on each one (write the draft to `drafts/<item-id>.txt` first). Fix what it reports and run it again, at most 2 rounds; put what is left in `checks`.
-6. Set `cursors` to the newest message time you read per source, `synced_at` to now, write `state.json`.
+5. Drafts: write every draft per the skill's `style.md` (or the home `style.md` if it exists): no phrase from its `## Never write` list, no em dash, no bold, sentences under 25 words, active voice. The dashboard runs `scripts/check_draft.py` on each draft and shows what it flags.
+6. Set `cursors` to the newest message time you read per source (or leave a cursor as it was when that source had nothing new), `synced_at` to the `Now` given in the prompt, write `state.json`.
 7. Finish with 1-3 lines: what changed, how many items added, any source skipped and why.
 
 ## post <item-id>
