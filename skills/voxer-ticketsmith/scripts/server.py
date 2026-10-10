@@ -315,7 +315,7 @@ def home(everything=False):
     if not st: return page('ticketsmith', head + '<p class="lead">No sync yet. The first one starts within a minute; this page refreshes when it lands.</p>')
     active = [m for m in masters if kind_of(m) in ('started', 'unstarted')]
     work = {i['master']: i for i in all_open if i.get('kind') == 'work' and i.get('master') in ids}
-    ready = [m for m in active if m['id'] in work or m.get('status') == 'In Review']   # ready for review: a branch to look at, or Linear says so
+    ready = [m for m in masters if m['id'] in work or m.get('status') == 'In Review']   # ready for review: a branch to look at, or Linear says so; any status
     summary = (f'{len(open_items)} thing{"s" if len(open_items) != 1 else ""} need{"s" if len(open_items) == 1 else ""} you. ' if open_items else 'Nothing needs you. ') \
               + f'{len(ready)} ready for review, {len(started)} in progress.'
     body = [head, f'<p class="lead">{summary}</p>']
@@ -332,7 +332,7 @@ def home(everything=False):
     rest_active = sorted((m for m in active if m not in ready), key=lambda m: (order.get(kind_of(m), 2), not blocked(m)))
     body.append(section('Ready for review', ready, lambda mid: [work[mid]] if mid in work else []))
     body.append(section('In progress / Todo / blocked', rest_active, by))
-    rest = sorted((m for m in masters if m not in active), key=lambda m: {'triage': 0, 'backlog': 1}.get(kind_of(m), 2))
+    rest = sorted((m for m in masters if m not in active and m not in ready), key=lambda m: {'triage': 0, 'backlog': 1}.get(kind_of(m), 2))
     if rest:
         body.append(f'<details class="card"{" open" if everything else ""}><summary>Everything else / backlog <span class="mut">{len(rest)}</span></summary>'
                     f'<table>{"".join(row(m, by(m["id"])) for m in rest)}</table></details>')
@@ -451,18 +451,20 @@ def test():
                   {'id': 'i-3', 'master': 'ENG-1', 'kind': 'reply', 'title': 'done one', 'status': 'posted'}]}))
     st = json.loads((HOME / 'state.json').read_text())
     st['masters'] += [{'id': 'ENG-7', 'title': 'Someday', 'status': 'Backlog'}, {'id': 'ENG-8', 'title': 'Now', 'status': 'In Progress', 'next': 'write the test'},
-                      {'id': 'ENG-11', 'title': 'Reviewing', 'status': 'In Review'},
+                      {'id': 'ENG-11', 'title': 'Reviewing', 'status': 'In Review'}, {'id': 'ENG-12', 'title': 'Triaged work', 'status': 'Triage'},
                       {'id': 'ENG-9', 'title': 'Stuck', 'status': 'Todo', 'subs': [{'id': 'ENG-10', 'statusType': 'unstarted', 'blockedBy': ['ENG-2']}]}]
-    st['items'].append({'id': 'i-w', 'master': 'ENG-8', 'kind': 'work', 'title': 'ENG-8: added the test', 'status': 'open'})
+    st['items'] += [{'id': 'i-w', 'master': 'ENG-8', 'kind': 'work', 'title': 'ENG-8: added the test', 'status': 'open'},
+                    {'id': 'i-w2', 'master': 'ENG-12', 'kind': 'work', 'title': 'ENG-12: branch', 'status': 'open'}]
     (HOME / 'state.json').write_text(json.dumps(st))
     h = home()
     assert h.index('Needs you') < h.index('Ready') < h.index('In progress / Todo / blocked') < h.index('Everything else'), 'four sections in order'
     ready = h[h.index('Ready for review'):h.index('In progress / Todo')]
     assert 'ENG-8' in ready and 'ENG-11' in ready and '#i-w">ENG-8: added the test' in ready and '>ENG-1</a>' not in ready and '>ENG-9</a>' not in ready, 'ready = work item or In Review'
     assert 'added the test' not in h[:h.index('Ready for review')], 'work items are not Needs you'
+    assert '>ENG-12</a>' in ready and '>ENG-12</a>' not in h[h.index('Everything else'):], 'a Triage ticket with a work item is Ready, not backlog'
     assert '⛔ blocked' in h[h.index('In progress / Todo'):h.index('Everything else')] and 'ENG-7' in h[h.index('Everything else'):]
     assert 'Needs you' in h and 'Patrick asks &lt;b&gt;' in h and 'done one' not in h, h
-    assert '3 things need you. 2 ready for review, 3 in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
+    assert '3 things need you. 3 ready for review, 3 in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
     assert '<textarea' not in h, 'home stays calm: no drafts inline'
     t = ticket_page('ENG-1')
     assert '1 of 2 sub-issues done' in t and '⛔ after ENG-2' in t and 'Post to ENG-1' in t and '2 things need you.' in t and t.count('class="panel') == 6, t
