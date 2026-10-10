@@ -464,7 +464,7 @@ def test():
     assert CARD_RE.match('ENG-12') and CARD_RE.match('inbox') and not CARD_RE.match('../x')
     assert command_for('shorten the draft') is None
     (HOME / 'config.toml').write_text('[[commands]]\nmatch = "^work on (this|it)"\nskill = "my-worker"\ntools = ["Bash"]\ncwd = "~/x"\n')
-    k = command_for('Work on this in voxer2mp3')
+    k = command_for('Work on this, please')
     assert k and k['skill'] == 'my-worker' and command_for('work: no') is None and config()['interval_min'] == 60
     st = json.loads((HOME / 'state.json').read_text())
     st['items'].append({'id': 'i-5', 'master': 'ENG-1', 'kind': 'result', 'title': 'ENG-3: did it', 'details': {'Where': 'a/b <x>', 'Checked': 'tests ok'}, 'command': 'cd /w && ls', 'status': 'open'})
