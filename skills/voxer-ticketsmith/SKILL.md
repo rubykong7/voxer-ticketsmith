@@ -48,6 +48,7 @@ Linear holds the goal. This skill holds the how, locally, and keeps the two in s
     "draft": "text to send, or the new description for a change; null if none",
     "options": ["for questions: 2-3 suggested answers"],
     "target": {"type": "linear_comment", "issue": "ENG-8692", "parentId": "comment id to reply under, optional"},
+    "details": {"optional label": "text, shown as a table"}, "command": "optional one line the owner can copy",
     "status": "open | posted | resolved | rejected | failed", "result": "posted URL or error",
     "created": "ISO"
   }],
@@ -55,6 +56,8 @@ Linear holds the goal. This skill holds the how, locally, and keeps the two in s
   "rejected": ["one line per suggestion the owner rejected, with their reason"]
 }
 ```
+
+`kind` is free text; the four above are the ones sync makes. Custom thread commands (config `[[commands]]`: `match` regex on the owner's post, `skill`, `tools`, `deny`, `cwd`, `timeout_min`) run their own skill with the card name and may add items of their own kind.
 
 `target.type` is `linear_comment`, `linear_issue` (`{"type":"linear_issue","id":"ENG-1 or null to create","fields":{save_issue args except description}}`; the description is `draft`), or `copy` (Slack and Voxer replies: the owner copies and sends them).
 

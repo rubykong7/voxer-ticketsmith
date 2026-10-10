@@ -34,6 +34,8 @@ Optional files in `~/.voxer-ticketsmith/`:
 
 A new source or task system is one markdown file in `inputs/` or `tasks/` that says which MCP tools to read and how.
 
+A thread post can start a skill of your own: add a `[[commands]]` entry to `config.toml` with `match` (a regex on the post), `skill`, and optionally `tools`, `deny`, `cwd` and `timeout_min`. The run gets the card name and can add items to the ticket page.
+
 ## How it runs
 
 The dashboard server (`scripts/server.py`, Python 3.11+ stdlib) runs `claude -p` one at a time: `sync` every interval, `post <item>` when you click Post, `reply <card>` when you send a thread message. Only `post` gets Linear write tools. Each run shows up under Sessions with a resume command.

@@ -27,6 +27,8 @@ DEFAULTS = {
                   + [V + t for t in ('list_threads', 'list_recent_messages', 'get_message', 'search_messages', 'get_thread')]
                   + ['mcp__claude_ai_Notion__notion-fetch'],
     'write_tools': [L + 'save_comment', L + 'save_issue'],
+    # custom thread commands: [[commands]] match (regex on the owner's post), skill, tools, deny, cwd, timeout_min
+    'commands': [],
 }
 def st_badge(m):
     k = m.get('statusType') or STATUS_TYPE.get(m.get('status'), 'other')
@@ -40,9 +42,15 @@ e = lambda s: html.escape(str(s if s is not None else ''), quote=True)
 
 def config():
     c = dict(DEFAULTS)
-    try: c.update(tomllib.loads((HOME / 'config.toml').read_text()))
-    except FileNotFoundError: pass
+    try: u = tomllib.loads((HOME / 'config.toml').read_text())
+    except FileNotFoundError: u = {}
+    c.update(u)
     return c
+
+def command_for(text):
+    for k in config()['commands']:
+        if re.match(k.get('match', '$^'), text, re.I): return k
+    return None
 
 def now_iso(): return datetime.now(timezone.utc).isoformat(timespec='seconds')
 
@@ -110,9 +118,9 @@ Q, RUNNING, LAST_TRY = queue.Queue(), {}, {'sync': 0.0}
 
 def prompt(cmd): return f'Use the voxer-ticketsmith skill. Command: {cmd}. Home: {HOME}. Now: {now_iso()} (use this for every timestamp and cursor; never guess the time).'
 
-def enqueue(name, cmd, write=False):
-    if name == RUNNING.get('name') or any(n == name for n, _, _ in list(Q.queue)): return 'already queued'
-    Q.put((name, cmd, write))
+def enqueue(name, cmd, write=False, custom=None):
+    if name == RUNNING.get('name') or any(n == name for n, *_ in list(Q.queue)): return 'already queued'
+    Q.put((name, cmd, write, custom))
     return 'queued' if RUNNING else 'started'
 
 def lock_busy():
@@ -120,28 +128,33 @@ def lock_busy():
     try: return time.time() - ts(json.loads((HOME / 'run.lock').read_text()).get('started', '')) < 1800
     except (FileNotFoundError, ValueError): return False
 
-def run(name, cmd, write):
+def run(name, cmd, write, custom=None):
     c = config()
     tools = ['Skill', 'Read', 'Glob', 'Grep'] + c['read_tools'] + (c['write_tools'] if write else [])
+    deny, cwd, timeout, p_text = ['AskUserQuestion'], HOME, c['run_timeout_min'] * 60, prompt(cmd)
+    if custom:   # a [[commands]] entry: its own skill, tools, folder and time budget
+        tools += custom.get('tools', []); deny += custom.get('deny', [])
+        cwd = Path(custom.get('cwd', str(HOME))).expanduser(); timeout = custom.get('timeout_min', c['run_timeout_min']) * 60
+        p_text = f'Use the {custom["skill"]} skill. Card: {cmd.split()[1]}. Home: {HOME}. Now: {now_iso()}.'
     sid = str(uuid.uuid4())
-    args = [CLAUDE, '-p', prompt(cmd), '--session-id', sid, '-n', f'ticketsmith {name}', '--model', c['model'],
-            '--permission-mode', 'acceptEdits', '--disallowedTools', 'AskUserQuestion', '--allowedTools', *tools]
+    args = [CLAUDE, '-p', p_text, '--session-id', sid, '-n', f'ticketsmith {name}', '--model', c['model'],
+            '--permission-mode', 'acceptEdits', '--disallowedTools', *deny, '--allowedTools', *tools]
     env = {k: v for k, v in os.environ.items() if k != 'ANTHROPIC_API_KEY'}   # use the plan, not an API key
     (HOME / 'logs').mkdir(exist_ok=True)
     with (HOME / 'logs' / f'{time.strftime("%Y-%m-%d")}.log').open('a') as log:
         log.write(f'\n== {time.strftime("%H:%M:%S")} {name} session {sid}\n'); log.flush()
-        p = subprocess.Popen(args, cwd=HOME, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
-        try: rc = p.wait(timeout=c['run_timeout_min'] * 60)
+        p = subprocess.Popen(args, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+        try: rc = p.wait(timeout=timeout)
         except subprocess.TimeoutExpired: p.kill(); rc = 'timeout'
         log.write(f'== {time.strftime("%H:%M:%S")} {name} exit {rc}\n')
 
 def worker():
     while True:
-        name, cmd, write = Q.get()
+        name, cmd, write, custom = Q.get()
         while lock_busy(): time.sleep(30)
         RUNNING.update(name=name, started=time.time())
         if name == 'sync': LAST_TRY['sync'] = time.time()
-        try: run(name, cmd, write)
+        try: run(name, cmd, write, custom)
         except Exception as x: print(f'run {name} failed: {x}', file=sys.stderr)
         finally: RUNNING.clear(); (HOME / 'run.lock').unlink(missing_ok=True)
 
@@ -199,6 +212,8 @@ def item_html(i):
          + (f' · <a href="{e(src.get("url"))}">{e(src.get("label") or "source")}</a>' if src.get('url') or src.get('label') else '') + '</div>',
          f'<b>{e(i.get("title"))}</b>' + (f'<div class="mut">{e(i.get("why"))}</div>' if i.get('why') else '')]
     if i.get('quote'): h.append(f'<blockquote>{e(i["quote"])}</blockquote>')
+    if i.get('details'): h.append(X.kv([(k, e(v)) for k, v in i['details'].items()]))   # free-form label → text, from any command
+    if i.get('command'): h.append(f'<textarea id="w-{iid}" rows="1" readonly>{e(i["command"])}</textarea><button onclick="cp(\'w-{iid}\',this)">Copy command</button>')
     if i.get('pending'): h.append(f'<div class="warn">{e(i["pending"])}</div>')
     elif i.get('draft') is not None:
         if t.get('type') == 'linear_issue':
@@ -395,6 +410,7 @@ class Handler(BaseHTTPRequestHandler):
             card = str(d.get('card', ''))
             if not CARD_RE.match(card) or not text: return self.send(400, 'bad card or empty text', 'text/plain')
             add_post(card, text)
+            if (k := command_for(text)): return self.send(200, enqueue(f'{k["skill"]} {card}', f'{k["skill"]} {card}', custom=k), 'text/plain')
             return self.send(200, enqueue(f'reply {card}', f'reply {card}') if d.get('now') else 'saved for next sync', 'text/plain')
         self.send(404, 'not found', 'text/plain')
 
@@ -446,6 +462,14 @@ def test():
     (HOME / 'threads' / 'ENG-1.md').open('a').write('## agent · 2026-10-10 10:00\nShortened it.\n\n')
     assert [w for w, _, _ in thread_posts('ENG-1')] == ['you', 'agent'] and 'Shortened it.' in ticket_page('ENG-1')
     assert CARD_RE.match('ENG-12') and CARD_RE.match('inbox') and not CARD_RE.match('../x')
+    assert command_for('shorten the draft') is None
+    (HOME / 'config.toml').write_text('[[commands]]\nmatch = "^work on (this|it)"\nskill = "my-worker"\ntools = ["Bash"]\ncwd = "~/x"\n')
+    k = command_for('Work on this in voxer2mp3')
+    assert k and k['skill'] == 'my-worker' and command_for('work: no') is None and config()['interval_min'] == 60
+    st = json.loads((HOME / 'state.json').read_text())
+    st['items'].append({'id': 'i-5', 'master': 'ENG-1', 'kind': 'result', 'title': 'ENG-3: did it', 'details': {'Where': 'a/b <x>', 'Checked': 'tests ok'}, 'command': 'cd /w && ls', 'status': 'open'})
+    (HOME / 'state.json').write_text(json.dumps(st))
+    assert 'a/b &lt;x&gt;' in ticket_page('ENG-1') and 'Copy command' in ticket_page('ENG-1') and '>cd /w &amp;&amp; ls</textarea>' in ticket_page('ENG-1')
     (HOME / 'state.json').write_text('{"half')
     assert 'ENG-8' in home(), 'half-written state.json must fall back to the last good copy'
     assert enqueue('sync', 'sync') == 'started' and enqueue('sync', 'sync') == 'already queued'
