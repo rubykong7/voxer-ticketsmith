@@ -18,7 +18,7 @@ CSS = """
 --accent:#8ab4ff;--accent-bg:#1f2a3d;--ok:#8cc79a;--ok-bg:#1c3122;--err:#f0928a;--err-bg:#3a1d1a;--warn:#e3b866;--warn-bg:#352a13;--head-bg:#ebe5d8;--head-fg:#15130f}}
 :root[data-theme=dark]{--bg:#15130f;--paper:#1c1a15;--ink:#ebe5d8;--ink-2:#b5ad9e;--ink-3:#7b7467;--line:#4a443a;--line-2:#2d2a24;--fill:#242119;
 --accent:#8ab4ff;--accent-bg:#1f2a3d;--ok:#8cc79a;--ok-bg:#1c3122;--err:#f0928a;--err-bg:#3a1d1a;--warn:#e3b866;--warn-bg:#352a13;--head-bg:#ebe5d8;--head-fg:#15130f}
-.sheet{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start}
+.sheet{display:grid;grid-template-columns:1fr 2fr;gap:16px;align-items:start}@media (max-width:720px){.sheet{grid-template-columns:1fr}}
 .panel{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;min-width:0}
 .panel.wide{grid-column:1/-1}.panel .ph{display:flex;align-items:stretch;border-bottom:1px solid var(--line);min-height:34px}
 .panel .ph .id{display:flex;align-items:center;justify-content:center;min-width:34px;padding:0 8px;background:var(--head-bg);color:var(--head-fg);font-weight:600;font-size:14px}
