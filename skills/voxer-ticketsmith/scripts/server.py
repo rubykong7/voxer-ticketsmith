@@ -292,7 +292,8 @@ def row(m, items):
     done, n = progress(m)
     return (f'<tr><td><a href="{e(m.get("url"))}" title="open in Linear">{e(m["id"])}</a> <a class="t" href="/t/{e(m["id"])}">{e(m.get("title"))}</a></td>'
             f'<td>{st_badge(m)}{" <span class=chip>⛔ blocked</span>" if blocked(m) else ""}</td><td class="mut">{f"{done}/{n} sub-issues" if n else ""}</td>'
-            f'<td class="warn">{"needs you: " + e(items[0].get("title")) if items else e(m.get("next") or "")}</td></tr>')
+            + '<td class="warn">' + (f'<a href="/t/{e(m["id"])}#{e(items[0]["id"])}">{e(items[0].get("title"))}</a>' if items and items[0].get('kind') == 'work'
+                                     else 'needs you: ' + e(items[0].get('title')) if items else e(m.get('next') or '')) + '</td></tr>')
 
 def section(title, ms, by, note=''):
     return f'<section class="card"><h2>{e(title)} <span class="mut">{note or len(ms)}</span></h2><table>{"".join(row(m, by(m["id"])) for m in ms)}</table></section>' if ms else ''
@@ -300,7 +301,8 @@ def section(title, ms, by, note=''):
 def home(everything=False):
     st, items = view()
     c = config()
-    open_items = [i for i in items.values() if i.get('status', 'open') == 'open']
+    all_open = [i for i in items.values() if i.get('status', 'open') == 'open']
+    open_items = [i for i in all_open if i.get('kind') != 'work']   # work items are reviews: they go under Ready, not Needs you
     masters = st.get('masters') or []
     ids = {m['id'] for m in masters}
     by = lambda mid: [i for i in open_items if i.get('master') == mid]
@@ -312,9 +314,10 @@ def home(everything=False):
     started = [m for m in masters if kind_of(m) == 'started']
     if not st: return page('ticketsmith', head + '<p class="lead">No sync yet. The first one starts within a minute; this page refreshes when it lands.</p>')
     active = [m for m in masters if kind_of(m) in ('started', 'unstarted')]
-    ready = [m for m in active if m.get('next') and not by(m['id']) and not blocked(m)]
+    work = {i['master']: i for i in all_open if i.get('kind') == 'work' and i.get('master') in ids}
+    ready = [m for m in active if m['id'] in work or m.get('status') == 'In Review']   # ready for review: a branch to look at, or Linear says so
     summary = (f'{len(open_items)} thing{"s" if len(open_items) != 1 else ""} need{"s" if len(open_items) == 1 else ""} you. ' if open_items else 'Nothing needs you. ') \
-              + f'{len(ready)} ready, {len(started)} in progress.'
+              + f'{len(ready)} ready for review, {len(started)} in progress.'
     body = [head, f'<p class="lead">{summary}</p>']
     if open_items:
         urls = {m['id']: m.get('url') for m in masters}
@@ -327,7 +330,7 @@ def home(everything=False):
         body.append(f'<section class="card needs"><h2>Needs you</h2><ul class="rows">{li}</ul></section>')
     order = {'started': 0, 'unstarted': 1}
     rest_active = sorted((m for m in active if m not in ready), key=lambda m: (order.get(kind_of(m), 2), not blocked(m)))
-    body.append(section('Ready', ready, by))
+    body.append(section('Ready for review', ready, lambda mid: [work[mid]] if mid in work else []))
     body.append(section('In progress / Todo / blocked', rest_active, by))
     rest = sorted((m for m in masters if m not in active), key=lambda m: {'triage': 0, 'backlog': 1}.get(kind_of(m), 2))
     if rest:
@@ -448,15 +451,18 @@ def test():
                   {'id': 'i-3', 'master': 'ENG-1', 'kind': 'reply', 'title': 'done one', 'status': 'posted'}]}))
     st = json.loads((HOME / 'state.json').read_text())
     st['masters'] += [{'id': 'ENG-7', 'title': 'Someday', 'status': 'Backlog'}, {'id': 'ENG-8', 'title': 'Now', 'status': 'In Progress', 'next': 'write the test'},
+                      {'id': 'ENG-11', 'title': 'Reviewing', 'status': 'In Review'},
                       {'id': 'ENG-9', 'title': 'Stuck', 'status': 'Todo', 'subs': [{'id': 'ENG-10', 'statusType': 'unstarted', 'blockedBy': ['ENG-2']}]}]
+    st['items'].append({'id': 'i-w', 'master': 'ENG-8', 'kind': 'work', 'title': 'ENG-8: added the test', 'status': 'open'})
     (HOME / 'state.json').write_text(json.dumps(st))
     h = home()
     assert h.index('Needs you') < h.index('Ready') < h.index('In progress / Todo / blocked') < h.index('Everything else'), 'four sections in order'
-    ready = h[h.index('Ready'):h.index('In progress / Todo')]
-    assert 'ENG-8' in ready and 'write the test' in ready and 'ENG-1' not in ready and 'ENG-9' not in ready, 'ready = next known, nothing needs you, not blocked'
+    ready = h[h.index('Ready for review'):h.index('In progress / Todo')]
+    assert 'ENG-8' in ready and 'ENG-11' in ready and '#i-w">ENG-8: added the test' in ready and '>ENG-1</a>' not in ready and '>ENG-9</a>' not in ready, 'ready = work item or In Review'
+    assert 'added the test' not in h[:h.index('Ready for review')], 'work items are not Needs you'
     assert '⛔ blocked' in h[h.index('In progress / Todo'):h.index('Everything else')] and 'ENG-7' in h[h.index('Everything else'):]
     assert 'Needs you' in h and 'Patrick asks &lt;b&gt;' in h and 'done one' not in h, h
-    assert '3 things need you. 1 ready, 2 in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
+    assert '3 things need you. 2 ready for review, 3 in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
     assert '<textarea' not in h, 'home stays calm: no drafts inline'
     t = ticket_page('ENG-1')
     assert '1 of 2 sub-issues done' in t and '⛔ after ENG-2' in t and 'Post to ENG-1' in t and '2 things need you.' in t and t.count('class="panel') == 6, t
