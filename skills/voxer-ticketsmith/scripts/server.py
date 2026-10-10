@@ -9,7 +9,7 @@ Usage: server.py            serve on 127.0.0.1:<port>
        server.py --test     self-check against a temp home (no claude runs)
 """
 import html, json, os, queue, re, shutil, subprocess, sys, tempfile, threading, time, tomllib, uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -52,7 +52,7 @@ def command_for(text):
         if re.match(k.get('match', '$^'), text, re.I): return k
     return None
 
-def now_iso(): return datetime.now(timezone.utc).isoformat(timespec='seconds')
+def now_iso(): return datetime.now().astimezone().isoformat(timespec='seconds')   # local, with offset: thread stamps match the owner's
 
 def ts(iso):
     try: return datetime.fromisoformat(iso.replace('Z', '+00:00')).timestamp()
