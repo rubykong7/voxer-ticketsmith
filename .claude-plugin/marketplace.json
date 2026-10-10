@@ -1,0 +1,5 @@
+{
+  "name": "voxer-ticketsmith",
+  "owner": { "name": "Ruby Kong" },
+  "plugins": [{ "name": "voxer-ticketsmith", "source": "./", "description": "Linear ticket organizer with a local dashboard and draft replies." }]
+}

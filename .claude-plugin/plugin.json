@@ -1,0 +1,6 @@
+{
+  "name": "voxer-ticketsmith",
+  "description": "Keeps Linear tickets organized from the conversations around them: local dashboard, draft replies, hourly sync over your MCP connections.",
+  "version": "0.1.0",
+  "author": { "name": "Ruby Kong" }
+}
