@@ -37,6 +37,7 @@ def st_badge(m):
 STATUS_TYPE = {'In Progress': 'started', 'In Review': 'started', 'In Testing': 'started', 'Todo': 'unstarted', 'Triage': 'triage', 'Backlog': 'backlog'}
 ACTIONS = {'edit', 'post', 'resolve', 'reject', 'answer'}
 CARD_RE = re.compile(r'^(inbox|[A-Z][A-Z0-9]*-\d+)$')
+PAGE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*\.html$')
 POST_RE = re.compile(r'^## (you|agent) · (.+)$', re.M)
 e = lambda s: html.escape(str(s if s is not None else ''), quote=True)
 
@@ -214,6 +215,7 @@ def item_html(i):
     if i.get('quote'): h.append(f'<blockquote>{e(i["quote"])}</blockquote>')
     if i.get('details'): h.append(X.kv([(k, e(v)) for k, v in i['details'].items()]))   # free-form label → text, from any command
     if i.get('command'): h.append(f'<textarea id="w-{iid}" rows="1" readonly>{e(i["command"])}</textarea><button onclick="cp(\'w-{iid}\',this)">Copy command</button>')
+    if i.get('page') and PAGE_RE.match(i['page']): h.append(f'<p><a class="go" href="/p/{e(i["page"])}">explain page →</a></p>')   # an HTML file in pages/, from any command
     if i.get('pending'): h.append(f'<div class="warn">{e(i["pending"])}</div>')
     elif i.get('draft') is not None:
         if t.get('type') == 'linear_issue':
@@ -404,6 +406,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/t/') and CARD_RE.match(path[3:]) and (p := ticket_page(path[3:])): return self.send(200, p)
         if path == '/api/sig': return self.send(200, sig(), 'text/plain')
         if path.startswith('/s/') and (p := transcript_page(path[3:])): return self.send(200, p)
+        if path.startswith('/p/') and PAGE_RE.match(path[3:]) and (f := HOME / 'pages' / path[3:]).is_file(): return self.send(200, f.read_text())
         self.send(404, 'not found', 'text/plain')
 
     def do_POST(self):
@@ -474,6 +477,10 @@ def test():
     assert 'Ignored today (1)' in home(everything=True) and 'Everything else' in home(everything=True)
     assert not add_inbox('i-9', 'edit', 'x') and not add_inbox('i-1', 'delete')
     assert add_inbox('i-1', 'edit', 'new text') and '>new text</textarea>' in ticket_page('ENG-1')
+    st = json.loads((HOME / 'state.json').read_text())
+    st['items'][0]['page'] = 'ENG-1-review.html'; st['items'][2]['page'] = '../etc/passwd'
+    (HOME / 'state.json').write_text(json.dumps(st))
+    assert 'href="/p/ENG-1-review.html"' in ticket_page('ENG-1') and 'passwd' not in ticket_page('ENG-1'), 'page link only for safe names'
     add_inbox('i-2', 'resolve')
     assert '2 things need you.' in home()
     add_inbox('i-1', 'post', 'final')

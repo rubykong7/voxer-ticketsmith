@@ -49,6 +49,7 @@ Linear holds the goal. This skill holds the how, locally, and keeps the two in s
     "options": ["for questions: 2-3 suggested answers"],
     "target": {"type": "linear_comment", "issue": "ENG-8692", "parentId": "comment id to reply under, optional"},
     "details": {"optional label": "text, shown as a table"}, "command": "optional one line the owner can copy",
+    "page": "optional file name in pages/ (letters, digits, . _ -, ends .html); the dashboard links it as the item's explain page",
     "status": "open | posted | resolved | rejected | failed", "result": "posted URL or error",
     "created": "ISO"
   }],
