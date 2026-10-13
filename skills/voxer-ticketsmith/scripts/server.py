@@ -185,7 +185,7 @@ textarea,input[type=text]{width:100%;font:15px/1.5 var(--font-sans);color:var(--
 button{font:inherit;font-size:14px;padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);color:var(--ink-2);cursor:pointer;margin:8px 6px 0 0}
 button:hover{color:var(--ink);border-color:var(--ink-3)}button.pri{background:var(--head-bg);border-color:var(--head-bg);color:var(--head-fg)}.warn{color:var(--warn);font-size:12px;margin-top:6px}
 .post{margin:0 0 8px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--fill);white-space:pre-wrap}.post.agent{border-left:3px solid var(--accent)}
-.am-root{--font-serif:var(--font-sans)!important;font-family:var(--font-sans);background:transparent}.am-root *:not(svg):not(svg *){font-family:var(--font-sans)!important}.am-root code,.am-root pre,.am-root kbd{font-family:var(--font-mono)}.am-root svg{max-width:100%;height:auto}.bad{color:var(--err)}a.ext{font-size:12px;color:var(--ink-3);white-space:nowrap}a.ext:hover{color:var(--accent)}td a.t{color:var(--ink)}td a.t b{color:var(--accent);font:600 13px var(--font-mono)}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
+.am-root{--font-serif:var(--font-sans)!important;font-family:var(--font-sans);background:transparent}.am-root *:not(svg):not(svg *){font-family:var(--font-sans)!important}.am-root code,.am-root pre,.am-root kbd{font-family:var(--font-mono)}.am-root svg{max-width:100%;height:auto}.bad{color:var(--err)}tr.sub td{padding-top:12px;border-bottom:0;font-size:12px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}tr.sub:empty{display:none}a.ext{font-size:12px;color:var(--ink-3);white-space:nowrap}a.ext:hover{color:var(--accent)}td a.t{color:var(--ink)}td a.t b{color:var(--accent);font:600 13px var(--font-mono)}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
 .msg{margin:8px 0;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--paper);white-space:pre-wrap}
 header button{margin-top:0}
 """
@@ -318,8 +318,8 @@ def ticket_page(mid):
                                       wide='<figure' in body or '<table' in body or 'am-tree' in body or len(body) > 3000))   # diagrams, tables, trees and long panels get the row
         else: panels.append(X.panel('C', 'How (local)', X.how(md), meta='steps, decisions, questions'))
         done, n = progress(m)
-        if n: panels.append(X.panel(chr(ord('A') + len(panels)), 'Sub-issues', X.tree(m), meta=f'{done}/{n} done', wide=True))
-    if mine: panels.append(X.panel(chr(ord('A') + len(panels)), 'Needs you', ''.join(item_html(i) for i in mine), meta=f'{len(mine)}', wide=True))
+        panels.append(X.panel(chr(ord('A') + len(panels)), 'Sub-issues', X.tree(m), meta=f'{done}/{n} done' if n else 'none', wide=True))   # always present: letters stay put
+    panels.append(X.panel(chr(ord('A') + len(panels)), 'Needs you', ''.join(item_html(i) for i in mine) or '<p class="mut">Nothing right now.</p>', meta=f'{len(mine)}' if mine else 'none', wide=True))
     panels.append(X.panel(chr(ord('A') + len(panels)), 'Thread', thread_html(mid), meta='tell the agent what to change', wide=True))
     return page(mid, f'<header><a href="/">← home</a><span style="margin-left:auto"></span><button onclick="theme()" title="light / dark">◐ theme</button></header>{head}<div class="sheet">{"".join(panels)}</div>', am_css)
 
@@ -334,8 +334,11 @@ def row(m, items):
             + '<td class="warn">' + (f'<a href="/t/{e(m["id"])}#{e(items[0]["id"])}">{e(items[0].get("title"))}</a>' if items and items[0].get('kind') == 'work'
                                      else 'needs you: ' + e(items[0].get('title')) if items else e(m.get('next') or '')) + '</td></tr>')
 
-def section(title, ms, by, note=''):
-    return f'<section class="card"><h2>{e(title)} <span class="mut">{note or len(ms)}</span></h2><table>{"".join(row(m, by(m["id"])) for m in ms)}</table></section>' if ms else ''
+def section(title, ms, by, note='', groups=None):
+    """groups: [(subhead, [masters])] draws a subhead row before each non-empty group."""
+    rows = ''.join(f'<tr class="sub"><td colspan="4">{e(g)} <span class="mut">{len(gm)}</span></td></tr>' + ''.join(row(m, by(m['id'])) for m in gm)
+                   for g, gm in (groups or [('', ms)]) if gm)
+    return f'<section class="card"><h2>{e(title)} <span class="mut">{note or len(ms)}</span></h2><table>{rows}</table></section>' if ms else ''
 
 def home(everything=False):
     st, items = view()
@@ -350,7 +353,7 @@ def home(everything=False):
     run = f'running {e(RUNNING["name"])}' if RUNNING else f'{Q.qsize()} queued' if Q.qsize() else ''
     fail = ' · '.join(f'<span class="bad">{e(f["name"])} failed {ago(f["at"])} (exit {e(f["rc"])}, see logs/)</span>' for f in LAST_FAIL.values())
     head = (f'<header><h1>voxer-ticketsmith</h1><span class="mut">synced {ago(synced) if synced else "never"} {run} {fail}</span>'
-            f'<button onclick="api(\'/api/sync\',{{}},this)">Sync now</button><a href="/sessions">Sessions</a><button onclick="theme()" title="light / dark">◐ theme</button></header>')
+            f'<button onclick="api(\'/api/sync\',{{}},this)">Sync now</button><a href="/sessions">Agent sessions</a><button onclick="theme()" title="light / dark">◐ theme</button></header>')
     started = [m for m in masters if kind_of(m) == 'started']
     if not st: return page('ticketsmith', head + '<p class="lead">No sync yet. The first one starts within a minute; this page refreshes when it lands.</p>')
     active = [m for m in masters if kind_of(m) in ('started', 'unstarted')]
@@ -369,9 +372,11 @@ def home(everything=False):
         li = ''.join(needs_row(i) for i in open_items)
         body.append(f'<section class="card needs"><h2>Needs you</h2><ul class="rows">{li}</ul></section>')
     order = {'started': 0, 'unstarted': 1}
-    rest_active = sorted((m for m in active if m not in ready), key=lambda m: (order.get(kind_of(m), 2), not blocked(m)))
+    rest_active = [m for m in active if m not in ready]
+    groups = [('In progress', [m for m in rest_active if kind_of(m) == 'started']), ('Blocked', [m for m in rest_active if kind_of(m) != 'started' and blocked(m)]),
+              ('Todo', [m for m in rest_active if kind_of(m) != 'started' and not blocked(m)])]
     body.append(section('Ready for review', ready, lambda mid: [work[mid]] if mid in work else []))
-    body.append(section('In progress / Todo / blocked', rest_active, by))
+    body.append(section('Active', rest_active, by, groups=groups))
     rest = sorted((m for m in masters if m not in active and m not in ready), key=lambda m: {'triage': 0, 'backlog': 1}.get(kind_of(m), 2))
     if rest:
         body.append(f'<details class="card"{" open" if everything else ""}><summary>Everything else / backlog <span class="mut">{len(rest)}</span></summary>'
@@ -498,12 +503,14 @@ def test():
                     {'id': 'i-w2', 'master': 'ENG-12', 'kind': 'work', 'title': 'ENG-12: branch', 'status': 'open'}]
     (HOME / 'state.json').write_text(json.dumps(st))
     h = home()
-    assert h.index('Needs you') < h.index('Ready') < h.index('In progress / Todo / blocked') < h.index('Everything else'), 'four sections in order'
-    ready = h[h.index('Ready for review'):h.index('In progress / Todo')]
+    assert h.index('Needs you') < h.index('Ready') < h.index('>Active') < h.index('Everything else'), 'four sections in order'
+    act = h[h.index('>Active'):h.index('Everything else')]
+    assert act.index('In progress') < act.index('Blocked') < act.index('Todo') and '<b>ENG-9</b>' in act[act.index('Blocked'):act.index('Todo')], 'subheads group the active rows'
+    ready = h[h.index('Ready for review'):h.index('>Active')]
     assert 'ENG-8' in ready and 'ENG-11' in ready and '#i-w">ENG-8: added the test' in ready and '<b>ENG-1</b>' not in ready and '<b>ENG-9</b>' not in ready, 'ready = work item or In Review'
     assert 'added the test' not in h[:h.index('Ready for review')], 'work items are not Needs you'
     assert '<b>ENG-12</b>' in ready and '<b>ENG-12</b>' not in h[h.index('Everything else'):], 'a Triage ticket with a work item is Ready, not backlog'
-    assert '⛔ blocked' in h[h.index('In progress / Todo'):h.index('Everything else')] and 'ENG-7' in h[h.index('Everything else'):]
+    assert '⛔ blocked' in act and 'ENG-7' in h[h.index('Everything else'):]
     assert 'Needs you' in h and 'Patrick asks &lt;b&gt;' in h and 'done one' not in h, h
     assert '3 things need you. 3 ready for review, 3 in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
     assert '<textarea' not in h, 'home stays calm: no drafts inline'
@@ -511,7 +518,7 @@ def test():
     assert '1 of 2 sub-issues done' in t and '⛔ after ENG-2' in t and 'Post to ENG-1' in t and '2 things need you.' in t and t.count('class="panel') == 6, t
     assert '⚠ banned: &quot;Thanks&quot;' in t and '⚠ banned: &quot;Let me know if&quot;' in t, 'drafts are checked at render time'
     assert ticket_page('inbox') and 'Which project?' in ticket_page('inbox') and ticket_page('ENG-99') is None
-    assert 'Sub-issues' not in ticket_page('ENG-8') and 'next sync reads' in ticket_page('ENG-8')
+    assert 'No sub-issues' in ticket_page('ENG-8') and 'next sync reads' in ticket_page('ENG-8') and 'Nothing right now' in ticket_page('ENG-11'), 'empty states keep the panels'
     (HOME / 'tasks').mkdir(); (HOME / 'tasks' / 'ENG-8.md').write_text('---\ntitle: ENG-8\n---\n## Steps\n1. [x] read\n\n## Flow\n```flow\nA -> B: x\n```\n')
     if NODE:
         t = ticket_page('ENG-8')
