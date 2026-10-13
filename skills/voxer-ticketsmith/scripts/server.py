@@ -30,10 +30,6 @@ DEFAULTS = {
     # custom thread commands: [[commands]] match (regex on the owner's post), skill, tools, deny, cwd, timeout_min
     'commands': [],
 }
-def st_badge(m):
-    k = m.get('statusType') or STATUS_TYPE.get(m.get('status'), 'other')
-    return f'<span class="st {e(k)}">{e(m.get("status"))}</span>'
-
 STATUS_TYPE = {'In Progress': 'started', 'In Review': 'started', 'In Testing': 'started', 'Todo': 'unstarted', 'Triage': 'triage', 'Backlog': 'backlog'}
 ACTIONS = {'edit', 'post', 'resolve', 'reject', 'answer'}
 CARD_RE = re.compile(r'^(inbox|[A-Z][A-Z0-9]*-\d+)$')
@@ -117,7 +113,8 @@ def add_post(card, text):
 # ---------- runs: one claude -p at a time ----------
 Q, RUNNING, LAST_TRY, LAST_FAIL = queue.Queue(), {}, {'sync': 0.0}, {}   # LAST_FAIL: name, rc, at of the newest bad run
 
-def prompt(cmd): return f'Use the voxer-ticketsmith skill. Command: {cmd}. Home: {HOME}. Now: {now_iso()} (use this for every timestamp and cursor; never guess the time).'
+def prompt(cmd, skill='voxer-ticketsmith', label='Command'):
+    return f'Use the {skill} skill. {label}: {cmd}. Home: {HOME}. Now: {now_iso()} (use this for every timestamp and cursor; never guess the time).'
 
 def enqueue(name, cmd, write=False, custom=None):
     if name == RUNNING.get('name') or any(n == name for n, *_ in list(Q.queue)): return 'already queued'
@@ -136,7 +133,7 @@ def run(name, cmd, write, custom=None):
     if custom:   # a [[commands]] entry: its own skill, tools, folder and time budget
         tools += custom.get('tools', []); deny += custom.get('deny', [])
         cwd = Path(custom.get('cwd', str(HOME))).expanduser(); timeout = custom.get('timeout_min', c['run_timeout_min']) * 60
-        p_text = f'Use the {custom["skill"]} skill. Card: {cmd.split()[1]}. Home: {HOME}. Now: {now_iso()}.'
+        p_text = prompt(cmd.split()[1], custom['skill'], 'Card')
     sid = str(uuid.uuid4())
     args = [CLAUDE, '-p', p_text, '--session-id', sid, '-n', f'ticketsmith {name}', '--model', c['model'],
             '--permission-mode', 'acceptEdits', '--disallowedTools', *deny, '--allowedTools', *tools]
@@ -175,7 +172,7 @@ header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-bottom
 h1{margin:0 0 20px;font:600 24px/1.25 var(--font-sans)}h1 a{font-family:var(--font-mono);font-size:18px}
 .mut{color:var(--ink-2)}.card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin:0 0 16px}
 .card h2{margin:0 0 6px;font:600 15px var(--font-sans)}.lead{font:16px/1.6 var(--font-sans);margin:4px 0 16px;max-width:80ch}
-table{border-collapse:collapse;width:100%;margin:6px 0;font-size:14px}td{padding:7px 10px;border-bottom:1px solid var(--line-2);vertical-align:top}td a.t{color:var(--ink)}td:not(:first-child){white-space:nowrap;width:1%}
+table{border-collapse:collapse;width:100%;margin:6px 0;font-size:14px}td{padding:7px 10px;border-bottom:1px solid var(--line-2);vertical-align:top}td:not(:first-child){white-space:nowrap;width:1%}
 .st{font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap;color:var(--ink-2);background:var(--fill)}.st.started{color:var(--accent);background:var(--accent-bg)}.st.completed{color:var(--ok);background:var(--ok-bg)}.st.unstarted,.st.triage{color:var(--warn);background:var(--warn-bg)}.st.canceled{color:var(--err);background:var(--err-bg)}
 .item{border:1px solid var(--line-2);border-left:3px solid var(--warn);background:var(--warn-bg);border-radius:var(--radius);padding:10px 14px}.item+.item{margin-top:12px}
 .item.question{border-left-color:var(--accent);background:var(--accent-bg)}.item.drift{border-left-color:var(--err);background:var(--err-bg)}.item.change{border-left-color:var(--ok);background:var(--ok-bg)}
@@ -185,7 +182,7 @@ textarea,input[type=text]{width:100%;font:15px/1.5 var(--font-sans);color:var(--
 button{font:inherit;font-size:14px;padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);color:var(--ink-2);cursor:pointer;margin:8px 6px 0 0}
 button:hover{color:var(--ink);border-color:var(--ink-3)}button.pri{background:var(--head-bg);border-color:var(--head-bg);color:var(--head-fg)}.warn{color:var(--warn);font-size:12px;margin-top:6px}
 .post{margin:0 0 8px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--fill);white-space:pre-wrap}.post.agent{border-left:3px solid var(--accent)}
-.am-root{--font-serif:var(--font-sans)!important;font-family:var(--font-sans);background:transparent}.am-root *:not(svg):not(svg *){font-family:var(--font-sans)!important}.am-root code,.am-root pre,.am-root kbd{font-family:var(--font-mono)}.am-root svg{max-width:100%;height:auto}.bad{color:var(--err)}tr.sub td{padding-top:12px;border-bottom:0;font-size:12px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}tr.sub:empty{display:none}a.ext{font-size:12px;color:var(--ink-3);white-space:nowrap}a.ext:hover{color:var(--accent)}td a.t{color:var(--ink)}td a.t b{color:var(--accent);font:600 13px var(--font-mono)}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
+.am-root{--font-serif:var(--font-sans)!important;font-family:var(--font-sans);background:transparent}.am-root *:not(svg):not(svg *):not(code):not(pre):not(kbd){font-family:var(--font-sans)!important}.am-root svg{max-width:100%;height:auto}.bad{color:var(--err)}tr.sub td{padding-top:12px;border-bottom:0;font-size:12px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}a.ext{font-size:12px;color:var(--ink-3);white-space:nowrap}a.ext:hover{color:var(--accent)}td a.t{color:var(--ink)}td a.t b{color:var(--accent);font:600 13px var(--font-mono)}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
 .msg{margin:8px 0;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--paper);white-space:pre-wrap}
 header button{margin-top:0}
 """
@@ -253,6 +250,8 @@ def thread_html(card):
 
 def kind_of(m): return m.get('statusType') or STATUS_TYPE.get(m.get('status'), 'other')
 
+def st_badge(m): return f'<span class="st {e(kind_of(m))}">{e(m.get("status"))}</span>'
+
 def progress(m):
     subs = [x for x in m.get('subs') or [] if x.get('statusType') != 'canceled']
     return sum(x.get('statusType') == 'completed' for x in subs), len(subs)
@@ -309,14 +308,13 @@ def ticket_page(mid):
         panels.append(X.panel('A', 'Where things stand', X.callout(lead(m, mine), 'warn' if mine else ''), meta=st_badge(m)))   # shares the row with B
         panels.append(X.panel('B', 'Goal', (f'<p>{e(m["goal"])}</p>' if m.get('goal') and not m['goal'].startswith('(') else '<p class="mut">Not read yet. The next sync reads the description and writes the goal here.</p>')
                               + X.kv([('Product ticket', f'<a href="{e(pr.get("url"))}">{e(pr.get("id"))}</a>' if pr.get('id') else '')])))
-        try: md = (HOME / 'tasks' / f'{mid}.md').read_text()
-        except FileNotFoundError: md = ''
         am_css, am = am_panels(pg) if (pg := how_page(mid)) else ('', [])
-        if am:   # the tasks file's own panels, diagrams included, as native panels
-            for title, body in am:
-                panels.append(X.panel(chr(ord('A') + len(panels)), title or 'How (local)', f'<div class="am-root" data-theme="paper" data-mode="auto">{body}</div>',
-                                      wide='<figure' in body or '<table' in body or 'am-tree' in body or len(body) > 3000))   # diagrams, tables, trees and long panels get the row
-        else: panels.append(X.panel('C', 'How (local)', X.how(md), meta='steps, decisions, questions'))
+        for title, body in am:   # the tasks file's own panels, diagrams included, as native panels
+            panels.append(X.panel(chr(ord('A') + len(panels)), title or 'How (local)', f'<div class="am-root" data-theme="paper" data-mode="auto">{body}</div>',
+                                  wide='<figure' in body or '<table' in body or 'am-tree' in body or len(body) > 3000))   # diagrams, tables, trees and long panels get the row
+        if not am:
+            why = 'Nothing recorded yet. Steps and decisions land here as the agent works the ticket.' if not (HOME / 'tasks' / f'{mid}.md').exists() else 'Install Node 20+ to render tasks/' + mid + '.md.' if not NODE else 'tasks/' + mid + '.md did not render; check it with: node scripts/am.mjs lint'
+            panels.append(X.panel('C', 'How (local)', f'<p class="mut">{e(why)}</p>'))
         done, n = progress(m)
         panels.append(X.panel(chr(ord('A') + len(panels)), 'Sub-issues', X.tree(m), meta=f'{done}/{n} done' if n else 'none', wide=True))   # always present: letters stay put
     panels.append(X.panel(chr(ord('A') + len(panels)), 'Needs you', ''.join(item_html(i) for i in mine) or '<p class="mut">Nothing right now.</p>', meta=f'{len(mine)}' if mine else 'none', wide=True))
@@ -341,15 +339,13 @@ def section(title, ms, by, note='', groups=None):
                    for g, gm in gs)   # subheads only when there is more than one group to tell apart
     return f'<section class="card"><h2>{e(title)} <span class="mut">{note or len(ms)}</span></h2><table>{rows}</table></section>' if ms else ''
 
-def home(everything=False):
+def home():
     st, items = view()
-    c = config()
     all_open = [i for i in items.values() if i.get('status', 'open') == 'open']
     open_items = [i for i in all_open if i.get('kind') != 'work']   # work items are reviews: they go under Ready, not Needs you
     masters = st.get('masters') or []
     ids = {m['id'] for m in masters}
     by = lambda mid: [i for i in open_items if i.get('master') == mid]
-    stray = [i for i in open_items if i.get('master') not in ids]
     synced = ts(st.get('synced_at', ''))
     run = f'running {e(RUNNING["name"])}' if RUNNING else f'{Q.qsize()} queued' if Q.qsize() else ''
     fail = ' · '.join(f'<span class="bad">{e(f["name"])} failed {ago(f["at"])} (exit {e(f["rc"])}, see logs/)</span>' for f in LAST_FAIL.values())
@@ -372,7 +368,6 @@ def home(everything=False):
                     + f'</div><a class="go" href="/t/{e(card)}#{e(i["id"])}">open →</a></li>')
         li = ''.join(needs_row(i) for i in open_items)
         body.append(f'<section class="card needs"><h2>Needs you</h2><ul class="rows">{li}</ul></section>')
-    order = {'started': 0, 'unstarted': 1}
     rest_active = [m for m in active if m not in ready]
     groups = [('In progress', [m for m in rest_active if kind_of(m) == 'started']), ('Blocked', [m for m in rest_active if kind_of(m) != 'started' and blocked(m)]),
               ('Todo', [m for m in rest_active if kind_of(m) != 'started' and not blocked(m)])]
@@ -380,7 +375,7 @@ def home(everything=False):
     body.append(section('Active', rest_active, by, groups=groups))
     rest = sorted((m for m in masters if m not in active and m not in ready), key=lambda m: {'triage': 0, 'backlog': 1}.get(kind_of(m), 2))
     if rest:
-        body.append(f'<details class="card"{" open" if everything else ""}><summary>Everything else / backlog <span class="mut">{len(rest)}</span></summary>'
+        body.append(f'<details class="card"><summary>Everything else / backlog <span class="mut">{len(rest)}</span></summary>'
                     f'<table>{"".join(row(m, by(m["id"])) for m in rest)}</table></details>')
     ign = st.get('ignored') or [] if st.get('ignored_day') == time.strftime('%Y-%m-%d') else []
     if ign:
@@ -446,7 +441,6 @@ class Handler(BaseHTTPRequestHandler):
         path = unquote(urlparse(self.path).path)
         if path == '/': return self.send(200, home())
         if path == '/sessions': return self.send(200, sessions_page())
-        if path == '/all': return self.send(200, home(everything=True))
         if path.startswith('/t/') and CARD_RE.match(path[3:]) and (p := ticket_page(path[3:])): return self.send(200, p)
         if path == '/api/sig': return self.send(200, sig(), 'text/plain')
         if path.startswith('/s/') and (p := transcript_page(path[3:])): return self.send(200, p)
@@ -526,8 +520,8 @@ def test():
         t = ticket_page('ENG-8')
         assert '<iframe' not in t and 'class="am-root"' in t and '<svg' in t and (HOME / 'pages' / 'ENG-8.html').exists(), 'am panels inlined, not framed'
         assert '<b>Steps</b>' in t and '<b>Flow</b>' in t and 'html[data-theme' not in t and '.am-root[data-theme' in t, 'am panels become ours; theme vars scoped'
-    else: assert 'class="done">read' in ticket_page('ENG-8')
-    assert 'Ignored today (1)' in home(everything=True) and 'Everything else' in home(everything=True)
+    else: assert 'Install Node' in ticket_page('ENG-8')
+    assert 'Ignored today (1)' in home() and 'Everything else' in home()
     assert not add_inbox('i-9', 'edit', 'x') and not add_inbox('i-1', 'delete')
     assert 'Linear ↗' in h and 'title="open in Linear">ENG-8' not in h and 'class="pri"' in ticket_page('ENG-1'), 'external links marked, Send now primary'
     LAST_FAIL['sync'] = {'name': 'sync', 'rc': 1, 'at': time.time()}

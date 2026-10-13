@@ -4,14 +4,14 @@ The layout idea (one screen, lettered panels, verdict first, tree and callout co
 answer-me-with-html by QingYunA (MIT, https://github.com/QingYunA/answer-me-with-html), re-done here in
 plain Python so the dashboard needs no node CLI.
 """
-import html, re
+import html
 
 e = lambda s: html.escape(str(s if s is not None else ''), quote=True)
 
 CSS = """
 :root{--font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",Roboto,"Helvetica Neue",Arial,sans-serif;
 --font-mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
---font-serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Songti SC","Noto Serif CJK SC",serif;--radius:6px;
+--radius:6px;
 --bg:#f5f2ea;--paper:#fdfbf6;--ink:#1f1c17;--ink-2:#57514a;--ink-3:#8c867b;--line:#cbc3b4;--line-2:#e5dfd3;--fill:#f3eee4;
 --accent:#1f5fbf;--accent-bg:#e8eef9;--ok:#2e6a3b;--ok-bg:#e4efe5;--err:#a3251b;--err-bg:#f7e3e0;--warn:#7f5300;--warn-bg:#f6ecd6;--head-bg:#1f1c17;--head-fg:#fdfbf6}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#15130f;--paper:#1c1a15;--ink:#ebe5d8;--ink-2:#b5ad9e;--ink-3:#7b7467;--line:#4a443a;--line-2:#2d2a24;--fill:#242119;
@@ -33,8 +33,6 @@ CSS = """
 .node.done{border-left-color:var(--ok)}.node.started{border-left-color:var(--accent)}.node.blocked{border-left-color:var(--err)}
 .node a{white-space:nowrap;font:13px var(--font-mono);font-weight:600}.node .t{flex:1;min-width:12em}.node.done .t{color:var(--ink-3);text-decoration:line-through}
 .node .who{color:var(--ink-2);font-size:13px;white-space:nowrap}.node .chip{font-size:11px;color:var(--err);white-space:nowrap}
-.how{font:14px/1.7 var(--font-sans)}.how h3{font-size:12px;font-weight:600;margin:12px 0 4px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}.how h3:first-child{margin-top:0}
-.how ul,.how ol{margin:0;padding-left:20px}.how li{margin:2px 0}.how li.done{color:var(--ink-3);text-decoration:line-through}.how p{margin:0}
 """
 
 def panel(letter, title, body, meta='', wide=False):
@@ -59,33 +57,6 @@ def tree(m):
     subs = [s for s in m.get('subs') or [] if s.get('statusType') != 'canceled']
     return '<ul class="tree">' + ''.join(f'<li>{node(s)}</li>' for s in subs) + '</ul>' if subs else '<p class="mut">No sub-issues.</p>'
 
-def how(md):
-    """tasks/<master>.md (## Steps / Decisions / Open questions / Sources with - or 1. lists) → html. Lines starting [x] are done."""
-    out, lst = [], None
-    def close():
-        nonlocal lst
-        if lst: out.append(f'</{lst}>'); lst = None
-    for raw in md.splitlines():
-        line = raw.strip()
-        if not line: continue
-        if line.startswith('#'):
-            close(); out.append(f'<h3>{e(line.lstrip("#").strip())}</h3>'); continue
-        m = re.match(r'^(?:[-*]|\d+[.)])\s+(\[[ xX]\]\s*)?(.*)$', line)
-        if m:
-            tag = 'ol' if line[0].isdigit() else 'ul'
-            if lst != tag: close(); out.append(f'<{tag}>'); lst = tag
-            done = bool(m.group(1) and m.group(1).strip().lower() == '[x]')
-            out.append(f'<li class="{"done" if done else ""}">{inline(m.group(2))}</li>'); continue
-        close(); out.append(f'<p>{inline(line)}</p>')
-    close()
-    return f'<div class="how">{"".join(out)}</div>' if out else '<p class="mut">Nothing recorded yet. Steps and decisions land here as the agent works the ticket.</p>'
-
-def inline(t):
-    t = e(t)
-    t = re.sub(r'`([^`]+)`', r'<code>\1</code>', t)
-    t = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', r'<a href="\2">\1</a>', t)
-    return re.sub(r'(?<!["=])(https?://[^\s<]+)', r'<a href="\1">\1</a>', t)
-
 def test():
     m = {'id': 'ENG-1', 'title': 'Export', 'url': 'u', 'status': 'Todo',
          'subs': [{'id': 'ENG-2', 'title': 'A', 'statusType': 'completed', 'status': 'Done', 'assignee': 'Ruby', 'mine': True},
@@ -94,9 +65,6 @@ def test():
     t = tree(m)
     assert 'class="node done"' in t and 'blocked' in t and '⛔ after ENG-2' in t and 'B &lt;x&gt;' in t and 'gone' not in t and 'Export' not in t, t
     assert 'No sub-issues' in tree({'id': 'ENG-9'})
-    h = how('## Steps\n1. [x] read code\n2. write test\n\n## Decisions\n- keep 15 days, see https://x.y/z\n')
-    assert '<ol>' in h and 'class="done">read code' in h and '<h3>Decisions</h3>' in h and '<a href="https://x.y/z">' in h, h
-    assert 'Nothing recorded' in how('')
     assert panel('A', 'T', 'b', meta='m', wide=True).startswith('<section class="panel wide">')
     print('ok')
 
