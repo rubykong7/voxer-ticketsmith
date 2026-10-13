@@ -117,7 +117,7 @@ The prompt gives you `Now`. Use it for every timestamp. You have no clock; never
 
 Run hourly by the dashboard. Read-only outside the home folder. No Bash.
 
-1. Linear: follow `tasks/linear.md` to rebuild `masters` from the owner's issues, the full list every sync, not only those past the cursor. For each master or sub whose `updatedAt` is newer than stored, read what changed (description, status, new comments).
+1. Linear: follow `tasks/linear.md` to rebuild `masters` from the owner's issues, the full list every sync, not only those past the cursor. `masters` is what these rules give, not the previous list: when the stored state disagrees with the rules, this sync fixes it, without asking. For each master or sub whose `updatedAt` is newer than stored, read what changed (description, status, new comments).
 2. Sync rules between Linear and `tasks/<master>.md`:
    - Only Linear changed (someone else, or the owner by hand): Linear wins. Check the Steps in `tasks/<master>.md`. If they no longer fit the goal, add a `drift` item that says which step and why. Never edit Linear for this.
    - Only local changed (a decision in `tasks/<master>.md` that changes the goal or structure and is not marked published): add a `change` item with the exact `linear_issue` edit or a `linear_comment` that explains it.
