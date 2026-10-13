@@ -14,7 +14,7 @@ Tools: the Linear MCP (`list_issues`, `get_issue`, `list_comments`, `get_user`; 
    - `product`: the related issue whose team key is in config `product_teams` (default `PROD`).
    - `blockedBy` on subs: from `blocks` relations only.
 5. `next`: the first open sub that is not blocked, or the first open Step in `tasks/<master>.md`. Empty for done masters.
-6. New comments since the stored `updatedAt`: `list_comments` on the changed issue. Comments by others go through the relevance check.
+6. New comments since the stored `updatedAt`: `list_comments` on the changed issue. Comments by others go through the relevance check. The owner's own comments are facts and decisions: write what they tried, found and decided into `tasks/<master>.md` (Steps ticked or added, Decisions, Open questions, the diagram when it names a cause), set `next` from them, add no item.
 
 ## Ticket shape (for `change` items you draft)
 
