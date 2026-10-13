@@ -183,15 +183,16 @@ textarea,input[type=text]{width:100%;font:15px/1.5 var(--font-sans);color:var(--
 button{font:inherit;font-size:14px;padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);color:var(--ink-2);cursor:pointer;margin:8px 6px 0 0}
 button:hover{color:var(--ink);border-color:var(--ink-3)}button.pri{background:var(--head-bg);border-color:var(--head-bg);color:var(--head-fg)}.warn{color:var(--warn);font-size:12px;margin-top:6px}
 .post{margin:0 0 8px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--fill);white-space:pre-wrap}.post.agent{border-left:3px solid var(--accent)}
-iframe.how{width:100%;border:0;min-height:320px;display:block}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
+.am-root{font-family:var(--font-sans);background:transparent}.am-root svg{max-width:100%;height:auto}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
 .msg{margin:8px 0;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--paper);white-space:pre-wrap}
 header button{margin-top:0}
 """
 JS = """
 const H={'Content-Type':'application/json','X-Dash':'1'};
 try{const t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}
-function theme(){const d=document.documentElement.dataset,dark=matchMedia('(prefers-color-scheme:dark)').matches;const cur=d.theme||(dark?'dark':'light');d.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('theme',d.theme)}catch(e){};document.querySelectorAll('iframe.how').forEach(fit)}
-function fit(f){try{const h=f.contentDocument.documentElement;h.dataset.mode=document.documentElement.dataset.theme||'auto';f.style.height=(h.scrollHeight+24)+'px'}catch(e){}}
+function theme(){const d=document.documentElement.dataset,dark=matchMedia('(prefers-color-scheme:dark)').matches;const cur=d.theme||(dark?'dark':'light');d.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('theme',d.theme)}catch(e){};amMode()}
+function amMode(){const t=document.documentElement.dataset.theme||'auto';document.querySelectorAll('.am-root').forEach(r=>r.dataset.mode=t)}
+amMode()
 async function api(path,body,el){const r=await fetch(path,{method:'POST',headers:H,body:JSON.stringify(body)});
  const t=await r.text();if(el)el.textContent=t;if(r.ok&&!el)location.reload();return r.ok}
 function val(id){return document.getElementById(id).value}
@@ -202,9 +203,9 @@ function dirty(){return [...document.querySelectorAll('textarea,input[type=text]
 let sig=null;setInterval(async()=>{try{const s=await(await fetch('/api/sig')).text();if(sig&&s!==sig&&!dirty())location.reload();sig=s}catch(e){}},10000);
 """
 
-def page(title, body):
+def page(title, body, extra_css=''):
     return (f'<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>{e(title)}</title><style>{X.CSS}{CSS}</style></head><body><main>{body}</main>'
+            f'<title>{e(title)}</title><style>{X.CSS}{CSS}</style>{f"<style>{extra_css}</style>" if extra_css else ""}</head><body><main>{body}</main>'
             f'<script>{JS}</script></body></html>')
 
 def item_html(i):
@@ -273,7 +274,22 @@ def how_page(mid):
         try: subprocess.run([NODE, str(AM), 'render', str(md), '-o', str(out), '--no-open', '--theme', 'paper', '--mode', 'auto', '--style', 'off'],
                             capture_output=True, timeout=60)
         except (subprocess.TimeoutExpired, OSError): return None
-    return out.name if out.exists() else None
+    return out if out.exists() else None
+
+AM_SEC = re.compile(r'<section class="am-panel[^"]*"[^>]*>(.*?)</section>', re.S)
+AM_HEAD = re.compile(r'<header class="am-panel-head">.*?<h2[^>]*>(.*?)</h2>.*?</header>', re.S)
+AM_BODY = re.compile(r'<div class="am-panel-body">(.*)', re.S)
+
+def am_panels(path):
+    """(css, [(title, body_html)]) from an am page: its panels become ours, its theme vars scoped to .am-root instead of html."""
+    h = path.read_text()
+    css = ''.join(re.findall(r'<style[^>]*>(.*?)</style>', h, re.S))
+    css = re.sub(r'\bhtml(?=[\[\s,{.:])', '.am-root', css); css = re.sub(r'(?<![\w-])body(?=[\s,{.:])', '.am-root', css)
+    out = []
+    for sec in AM_SEC.findall(h):
+        t, b = AM_HEAD.search(sec), AM_BODY.search(sec)
+        if b: out.append((re.sub(r'<[^>]+>', '', t.group(1)).strip() if t else '', b.group(1).rsplit('</div>', 1)[0]))
+    return css, out
 
 def ticket_page(mid):
     st, items = view()
@@ -281,7 +297,7 @@ def ticket_page(mid):
     m = next((x for x in st.get('masters') or [] if x['id'] == mid), None)
     if not m and mid != 'inbox': return None
     mine = [i for i in items.values() if i.get('status', 'open') == 'open' and (i.get('master') == mid if mid != 'inbox' else i.get('master') not in ids)]
-    panels = []
+    panels, am_css = [], ''
     if mid == 'inbox':
         head = '<h1>Inbox <span class="mut">no master yet</span></h1>'
         panels.append(X.panel('A', 'Where things stand', X.callout(f'{len(mine)} item{"s" if len(mine) != 1 else ""} waiting for a home.'), wide=True))
@@ -293,15 +309,16 @@ def ticket_page(mid):
                               + X.kv([('Product ticket', f'<a href="{e(pr.get("url"))}">{e(pr.get("id"))}</a>' if pr.get('id') else '')])))
         try: md = (HOME / 'tasks' / f'{mid}.md').read_text()
         except FileNotFoundError: md = ''
-        if (pg := how_page(mid)):   # the tasks file rendered as an am sheet: diagrams, not lists
-            panels.append(X.panel('C', 'How (local)', f'<iframe class="how" src="/p/{e(pg)}" onload="fit(this)"></iframe>',
-                                  meta=f'<a href="/p/{e(pg)}">open full page ↗</a>', wide=True))
+        am_css, am = am_panels(pg) if (pg := how_page(mid)) else ('', [])
+        if am:   # the tasks file's own panels, diagrams included, as native panels
+            for title, body in am:
+                panels.append(X.panel(chr(ord('A') + len(panels)), title or 'How (local)', f'<div class="am-root" data-theme="paper" data-mode="auto">{body}</div>', wide=True))
         else: panels.append(X.panel('C', 'How (local)', X.how(md), meta='steps, decisions, questions'))
         done, n = progress(m)
-        if n: panels.append(X.panel('D', 'Sub-issues', X.tree(m), meta=f'{done}/{n} done', wide=True))
+        if n: panels.append(X.panel(chr(ord('A') + len(panels)), 'Sub-issues', X.tree(m), meta=f'{done}/{n} done', wide=True))
     if mine: panels.append(X.panel(chr(ord('A') + len(panels)), 'Needs you', ''.join(item_html(i) for i in mine), meta=f'{len(mine)}', wide=True))
     panels.append(X.panel(chr(ord('A') + len(panels)), 'Thread', thread_html(mid), meta='tell the agent what to change', wide=True))
-    return page(mid, f'<header><a href="/">← home</a><span style="margin-left:auto"></span><button onclick="theme()" title="light / dark">◐ theme</button></header>{head}<div class="sheet">{"".join(panels)}</div>')
+    return page(mid, f'<header><a href="/">← home</a><span style="margin-left:auto"></span><button onclick="theme()" title="light / dark">◐ theme</button></header>{head}<div class="sheet">{"".join(panels)}</div>', am_css)
 
 def blocked(m):
     subs = [x for x in m.get('subs') or [] if x.get('statusType') not in ('completed', 'canceled')]
@@ -493,8 +510,9 @@ def test():
     assert 'Sub-issues' not in ticket_page('ENG-8') and 'next sync reads' in ticket_page('ENG-8')
     (HOME / 'tasks').mkdir(); (HOME / 'tasks' / 'ENG-8.md').write_text('---\ntitle: ENG-8\n---\n## Steps\n1. [x] read\n\n## Flow\n```flow\nA -> B: x\n```\n')
     if NODE:
-        assert 'src="/p/ENG-8.html"' in ticket_page('ENG-8') and (HOME / 'pages' / 'ENG-8.html').exists(), 'tasks file rendered as an am sheet'
-        assert 'A -&gt; B' in (HOME / 'pages' / 'ENG-8.html').read_text() or 'flow' in (HOME / 'pages' / 'ENG-8.html').read_text()
+        t = ticket_page('ENG-8')
+        assert '<iframe' not in t and 'class="am-root"' in t and '<svg' in t and (HOME / 'pages' / 'ENG-8.html').exists(), 'am panels inlined, not framed'
+        assert '<b>Steps</b>' in t and '<b>Flow</b>' in t and 'html[data-theme' not in t and '.am-root[data-theme' in t, 'am panels become ours; theme vars scoped'
     else: assert 'class="done">read' in ticket_page('ENG-8')
     assert 'Ignored today (1)' in home(everything=True) and 'Everything else' in home(everything=True)
     assert not add_inbox('i-9', 'edit', 'x') and not add_inbox('i-1', 'delete')
