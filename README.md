@@ -44,6 +44,6 @@ Drafts are checked by `scripts/check_draft.py`: banned phrases from your style f
 
 ## Credits
 
-The ticket page's look (one screen of lettered panels, verdict first, a tree and a callout) and the STE draft check borrow their ideas from [answer-me-with-html](https://github.com/QingYunA/answer-me-with-html) by QingYunA (MIT). They are re-done in plain Python here so nothing else needs installing. The per-ticket thread and the headless-session list come from an earlier personal runner.
+The ticket page's look (one screen of lettered panels, verdict first, a tree and a callout) and the STE draft check borrow their ideas from [answer-me-with-html](https://github.com/QingYunA/answer-me-with-html) by QingYunA (MIT). They are re-done in plain Python here. The How panel on each ticket page renders `tasks/<master>.md` with am's single-file CLI, vendored as `scripts/am.mjs` (version in `scripts/AM_UPSTREAM`); it needs Node 20+, and without node the panel falls back to a plain list. The per-ticket thread and the headless-session list come from an earlier personal runner.
 
 Self-checks: `python3 scripts/server.py --test` and `python3 scripts/check_draft.py --test`.

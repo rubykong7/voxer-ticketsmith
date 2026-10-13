@@ -21,7 +21,7 @@ Linear holds the goal. This skill holds the how, locally, and keeps the two in s
 | `inbox.jsonl` | dashboard only | owner clicks, one JSON per line: `{"at","item","action","text"}`, action is `edit`, `post`, `resolve`, `reject` or `answer` |
 | `inbox.done.jsonl` | you | inbox lines you applied, appended in order |
 | `threads/<card>.md` | both (append only) | owner and agent posts: `## you · <time>` / `## agent · <time>` then the text |
-| `tasks/<master>.md` | you | the how for one master: Steps, Decisions, Open questions, Sources |
+| `tasks/<master>.md` | you | the how for one master, as an answer-me-with-html draft (format below); the dashboard renders it as a sheet of diagrams |
 | `run.lock` | whoever runs | `{"name","started"}` while a command runs |
 
 `<card>` is a master identifier (`ENG-8692`) or `inbox` for items with no master.
@@ -63,6 +63,39 @@ Linear holds the goal. This skill holds the how, locally, and keeps the two in s
 `target.type` is `linear_comment`, `linear_issue` (`{"type":"linear_issue","id":"ENG-1 or null to create","fields":{save_issue args except description}}`; the description is `draft`), or `copy` (Slack and Voxer replies: the owner copies and sends them).
 
 Write `state.json` whole with the Write tool. Keep every field you did not change. Keep items that are not `open` for 2 days, then drop them.
+
+### tasks/<master>.md
+
+An answer-me-with-html draft: frontmatter, then `## ` panels. The dashboard renders it with `scripts/am.mjs` (vendored, MIT) into `pages/<master>.html` and shows it in panel C. Keep these panels, in this order, and add diagram panels where a picture says it better than a list:
+
+```markdown
+---
+title: ENG-8692 · media as reference links
+---
+## A How it works
+```flow
+client -> broker: GET /exports/<id>/media/<file>?tk
+broker -> {token valid?}
+{token valid?} -> GCS: 302 to 5-minute signed URL
+{token valid?} --> client: 401
+```
+One or two sentences under the diagram: what the picture does not say.
+
+## B Steps
+1. [x] read the export job
+2. add the broker route
+
+## C Decisions
+- 302 to signed URLs, no proxying (2026-10-10, not published to Linear)
+
+## D Open questions
+- Do media links share the export expiry? (asked of Patrick)
+
+## E Sources
+- threads/ENG-8692.md
+```
+
+Rules: one diagram panel at least (`flow` for what talks to what, `sequence` for messages over time, `tree` for files or pieces; mark changes with `+ `, `- `, `~ `). Only things you read in code or notes; never invent a box. `node scripts/am.mjs help flow` (or `tree`, `sequence`) shows the syntax; `node scripts/am.mjs lint <file>` checks the text. Panel letters are optional. Lists stay short; the diagram carries the structure.
 
 ## Every command starts like this
 

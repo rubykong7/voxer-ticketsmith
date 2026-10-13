@@ -183,14 +183,15 @@ textarea,input[type=text]{width:100%;font:15px/1.5 var(--font-sans);color:var(--
 button{font:inherit;font-size:14px;padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);color:var(--ink-2);cursor:pointer;margin:8px 6px 0 0}
 button:hover{color:var(--ink);border-color:var(--ink-3)}button.pri{background:var(--head-bg);border-color:var(--head-bg);color:var(--head-fg)}.warn{color:var(--warn);font-size:12px;margin-top:6px}
 .post{margin:0 0 8px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--fill);white-space:pre-wrap}.post.agent{border-left:3px solid var(--accent)}
-.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
+iframe.how{width:100%;border:0;min-height:320px;display:block}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
 .msg{margin:8px 0;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--paper);white-space:pre-wrap}
 header button{margin-top:0}
 """
 JS = """
 const H={'Content-Type':'application/json','X-Dash':'1'};
 try{const t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}
-function theme(){const d=document.documentElement.dataset,dark=matchMedia('(prefers-color-scheme:dark)').matches;const cur=d.theme||(dark?'dark':'light');d.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('theme',d.theme)}catch(e){}}
+function theme(){const d=document.documentElement.dataset,dark=matchMedia('(prefers-color-scheme:dark)').matches;const cur=d.theme||(dark?'dark':'light');d.theme=cur==='dark'?'light':'dark';try{localStorage.setItem('theme',d.theme)}catch(e){};document.querySelectorAll('iframe.how').forEach(fit)}
+function fit(f){try{const h=f.contentDocument.documentElement;h.dataset.mode=document.documentElement.dataset.theme||'auto';f.style.height=(h.scrollHeight+24)+'px'}catch(e){}}
 async function api(path,body,el){const r=await fetch(path,{method:'POST',headers:H,body:JSON.stringify(body)});
  const t=await r.text();if(el)el.textContent=t;if(r.ok&&!el)location.reload();return r.ok}
 function val(id){return document.getElementById(id).value}
@@ -261,6 +262,19 @@ def lead(m, items):
     if m.get('next'): parts.append(f'Next: {m["next"]}.')
     return ' '.join(parts)
 
+AM, NODE = SKILL / 'scripts' / 'am.mjs', shutil.which('node')
+
+def how_page(mid):
+    """Render tasks/<mid>.md with the vendored answer-me-with-html into pages/<mid>.html when the md is newer. None without node or a tasks file."""
+    md, out = HOME / 'tasks' / f'{mid}.md', HOME / 'pages' / f'{mid}.html'
+    if not (NODE and AM.exists() and md.exists()): return None
+    if not out.exists() or out.stat().st_mtime < md.stat().st_mtime:
+        out.parent.mkdir(exist_ok=True)
+        try: subprocess.run([NODE, str(AM), 'render', str(md), '-o', str(out), '--no-open', '--theme', 'paper', '--mode', 'auto', '--style', 'off'],
+                            capture_output=True, timeout=60)
+        except (subprocess.TimeoutExpired, OSError): return None
+    return out.name if out.exists() else None
+
 def ticket_page(mid):
     st, items = view()
     ids = {x['id'] for x in st.get('masters') or []}
@@ -279,7 +293,10 @@ def ticket_page(mid):
                               + X.kv([('Product ticket', f'<a href="{e(pr.get("url"))}">{e(pr.get("id"))}</a>' if pr.get('id') else '')])))
         try: md = (HOME / 'tasks' / f'{mid}.md').read_text()
         except FileNotFoundError: md = ''
-        panels.append(X.panel('C', 'How (local)', X.how(md), meta='steps, decisions, questions'))
+        if (pg := how_page(mid)):   # the tasks file rendered as an am sheet: diagrams, not lists
+            panels.append(X.panel('C', 'How (local)', f'<iframe class="how" src="/p/{e(pg)}" onload="fit(this)"></iframe>',
+                                  meta=f'<a href="/p/{e(pg)}">open full page ↗</a>', wide=True))
+        else: panels.append(X.panel('C', 'How (local)', X.how(md), meta='steps, decisions, questions'))
         done, n = progress(m)
         if n: panels.append(X.panel('D', 'Sub-issues', X.tree(m), meta=f'{done}/{n} done', wide=True))
     if mine: panels.append(X.panel(chr(ord('A') + len(panels)), 'Needs you', ''.join(item_html(i) for i in mine), meta=f'{len(mine)}', wide=True))
@@ -474,6 +491,11 @@ def test():
     assert '⚠ banned: &quot;Thanks&quot;' in t and '⚠ banned: &quot;Let me know if&quot;' in t, 'drafts are checked at render time'
     assert ticket_page('inbox') and 'Which project?' in ticket_page('inbox') and ticket_page('ENG-99') is None
     assert 'Sub-issues' not in ticket_page('ENG-8') and 'next sync reads' in ticket_page('ENG-8')
+    (HOME / 'tasks').mkdir(); (HOME / 'tasks' / 'ENG-8.md').write_text('---\ntitle: ENG-8\n---\n## Steps\n1. [x] read\n\n## Flow\n```flow\nA -> B: x\n```\n')
+    if NODE:
+        assert 'src="/p/ENG-8.html"' in ticket_page('ENG-8') and (HOME / 'pages' / 'ENG-8.html').exists(), 'tasks file rendered as an am sheet'
+        assert 'A -&gt; B' in (HOME / 'pages' / 'ENG-8.html').read_text() or 'flow' in (HOME / 'pages' / 'ENG-8.html').read_text()
+    else: assert 'class="done">read' in ticket_page('ENG-8')
     assert 'Ignored today (1)' in home(everything=True) and 'Everything else' in home(everything=True)
     assert not add_inbox('i-9', 'edit', 'x') and not add_inbox('i-1', 'delete')
     assert add_inbox('i-1', 'edit', 'new text') and '>new text</textarea>' in ticket_page('ENG-1')
