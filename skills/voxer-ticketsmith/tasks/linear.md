@@ -4,7 +4,8 @@ Tools: the Linear MCP (`list_issues`, `get_issue`, `list_comments`, `get_user`; 
 
 ## Build `masters`
 
-1. `list_issues` with `assignee: "me"`, `limit: 100`, fields `id, title, url, status, statusType, parentId, updatedAt, assignee, team`. No `updatedAt` filter: the whole list, every sync, so a ticket closed or assigned since last time moves or appears. Drop `completed` and `canceled` issues whose `updatedAt` is more than 30 days before `Now`; keep the recent ones, the dashboard files them under Done recently and their pages keep working.
+1. `list_issues` with `assignee: "me"`, `limit: 100`, fields `id, title, url, status, statusType, parentId, updatedAt, assignee, team`. No `updatedAt` filter: the whole list, every sync, so a ticket closed or assigned since last time moves or appears.
+   - Done issues (`statusType` `completed`, `canceled` or `duplicate`) stay in `masters` when their `updatedAt` is within 30 days of `Now`; drop older ones. The dashboard files them under Done recently and their pages keep working. Keep their stored `goal`, `subs` and `next` as they were; never spend a `get_issue` on a done master.
 2. An issue with a `parentId` belongs to that parent: the parent is the master. An issue with no parent is its own master.
    - Carry `new` and `sorted` over from the stored master. A master that is not in the stored `masters` gets `new: true`, unless there was no stored state (first sync). Drop `sorted` when the status changed in Linear since the last sync: Linear now says where it goes.
 3. For each master: `list_issues` with `parentId: <master>` (same fields) for its subs, all assignees. `mine` is true when the sub is assigned to the owner.

@@ -31,8 +31,8 @@ DEFAULTS = {
     'commands': [],
 }
 STATUS_TYPE = {'In Progress': 'started', 'In Review': 'started', 'In Testing': 'started', 'Todo': 'unstarted', 'Triage': 'triage', 'Backlog': 'backlog',
-               'Done': 'completed', 'Canceled': 'canceled', 'Duplicate': 'canceled'}
-DONE = ('completed', 'canceled')
+               'Done': 'completed', 'Canceled': 'canceled', 'Duplicate': 'duplicate'}
+DONE = ('completed', 'canceled', 'duplicate')
 ACTIONS = {'edit', 'post', 'resolve', 'reject', 'answer', 'sort'}
 CARD_RE = re.compile(r'^(inbox|[A-Z][A-Z0-9]*-\d+)$')
 PAGE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*\.html$')
@@ -332,7 +332,7 @@ def ticket_page(mid):
     return page(mid, f'<header><a href="/">← home</a><span style="margin-left:auto"></span><button onclick="theme()" title="light / dark">◐ theme</button></header>{head}<div class="sheet">{"".join(panels)}</div>', am_css)
 
 def blocked(m):
-    subs = [x for x in m.get('subs') or [] if x.get('statusType') not in ('completed', 'canceled')]
+    subs = [x for x in m.get('subs') or [] if x.get('statusType') not in DONE]
     return bool(subs) and all(x.get('blockedBy') for x in subs)
 
 def sort_btns(m):
