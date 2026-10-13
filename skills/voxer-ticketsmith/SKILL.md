@@ -18,7 +18,7 @@ Linear holds the goal. This skill holds the how, locally, and keeps the two in s
 | `config.toml` | owner | optional; keys in `scripts/server.py` DEFAULTS (`inputs`, `slack_channels`, `product_teams`, `model`, `interval_min`, `port`) |
 | `style.md` | owner | optional; overrides the skill's `style.md` for drafts |
 | `state.json` | you (Claude) only | everything the dashboard shows; schema below |
-| `inbox.jsonl` | dashboard only | owner clicks, one JSON per line: `{"at","item","action","text"}`, action is `edit`, `post`, `resolve`, `reject`, `answer` or `sort` (`item` is a master id, `text` is `todo` or `backlog`) |
+| `inbox.jsonl` | dashboard only | owner clicks, one JSON per line: `{"at","item","action","text"}`, action is `edit`, `post`, `resolve`, `reject`, `answer`, `sort` (`item` is a master id, `text` is `todo` or `backlog`) or `approve` (`item` is a master id, `text` is `on` or `off`) |
 | `inbox.done.jsonl` | you | inbox lines you applied, appended in order |
 | `threads/<card>.md` | both (append only) | owner and agent posts: `## you · <time>` / `## agent · <time>` then the text |
 | `tasks/<master>.md` | you | the how for one master, as an answer-me-with-html draft (format below); the dashboard renders it as a sheet of diagrams |
@@ -41,7 +41,8 @@ Linear holds the goal. This skill holds the how, locally, and keeps the two in s
     "next": "the next action in one line",
     "updatedAt": "newest Linear updatedAt of the master and its subs at this sync",
     "new": "true while the master has appeared since an earlier sync and the owner has not sorted it; absent otherwise",
-    "sorted": "todo | backlog: where the owner filed it on the dashboard; absent otherwise"
+    "sorted": "todo | backlog: where the owner filed it on the dashboard; absent otherwise",
+    "approved": "YYYY-MM-DD the owner clicked Tonight; absent otherwise. Read by the owner's own night commands, never by this skill"
   }],
   "items": [{
     "id": "i-<8 hex>", "master": "ENG-8692 or null", "kind": "reply | question | change | drift | unrouted",
@@ -110,6 +111,7 @@ The prompt gives you `Now`. Use it for every timestamp. You have no clock; never
    - `resolve` / `reject`: set `status`. For `reject`, add a line to `rejected`: what was suggested and the owner's reason (`text`). Never suggest it again.
    - `answer`: the owner answered a question item with `text`. Write it as a decision in `tasks/<master>.md`. If Product or someone else needs the answer, add a `reply` item with a draft that says it. Resolve the question.
    - `sort`: on the master named by `item`, delete `new` and set `sorted` to `text`. Nothing changes in Linear.
+   - `approve`: on the master named by `item`, set `approved` to today's date for `on`, delete it for `off`.
    - `post`: leave it for the `post` command (the dashboard queues one per click).
    Then append the applied lines to `inbox.done.jsonl` and remove them from `inbox.jsonl`. Leave `post` lines for the `post` command.
 

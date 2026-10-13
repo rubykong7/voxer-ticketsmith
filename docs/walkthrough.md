@@ -38,7 +38,7 @@ Home
   Everything else | Triage and Backlog, collapsed
   Done recently | closed in the last 30 days, collapsed; pages and threads stay
 ```
-The lead sentence at the top is the whole status. Each row opens the ticket page; the small Linear link opens Linear. The Todo and Backlog buttons file a ticket on this page only; its Linear status does not change.
+The lead sentence at the top is the whole status. Each row opens the ticket page; the small Linear link opens Linear. The Todo and Backlog buttons file a ticket on this page only; its Linear status does not change. The Tonight button on a ticket page marks it `approved` for your own evening commands; this skill never reads it.
 
 ## D Ticket page
 ```tree

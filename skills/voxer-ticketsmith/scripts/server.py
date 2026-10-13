@@ -33,7 +33,8 @@ DEFAULTS = {
 STATUS_TYPE = {'In Progress': 'started', 'In Review': 'started', 'In Testing': 'started', 'Todo': 'unstarted', 'Triage': 'triage', 'Backlog': 'backlog',
                'Done': 'completed', 'Canceled': 'canceled', 'Duplicate': 'duplicate'}
 DONE = ('completed', 'canceled', 'duplicate')
-ACTIONS = {'edit', 'post', 'resolve', 'reject', 'answer', 'sort'}
+ACTIONS = {'edit', 'post', 'resolve', 'reject', 'answer', 'sort', 'approve'}
+MASTER_ACTIONS = ('sort', 'approve')   # item is a master id
 CARD_RE = re.compile(r'^(inbox|[A-Z][A-Z0-9]*-\d+)$')
 PAGE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*\.html$')
 POST_RE = re.compile(r'^## (you|agent) · (.+)$', re.M)
@@ -88,9 +89,10 @@ def view():
     items = {i['id']: dict(i) for i in st.get('items', []) if i.get('id')}
     for a in inbox():
         k = a.get('action')
-        if k == 'sort':
+        if k in MASTER_ACTIONS:
             m = masters.get(a.get('item'))
-            if m: m.pop('new', None); m['sorted'] = a.get('text')
+            if m and k == 'sort': m.pop('new', None); m['sorted'] = a.get('text')
+            if m and k == 'approve': m['approved'] = time.strftime('%Y-%m-%d') if a.get('text') == 'on' else None
             continue
         i = items.get(a.get('item'))
         if not i: continue
@@ -103,7 +105,7 @@ def view():
 
 def add_inbox(item, action, text=''):
     st = load_state()
-    known = {m.get('id') for m in st.get('masters', [])} if action == 'sort' else {i.get('id') for i in st.get('items', [])}
+    known = {m.get('id') for m in st.get('masters', [])} if action in MASTER_ACTIONS else {i.get('id') for i in st.get('items', [])}
     if action not in ACTIONS or item not in known: return False
     with (HOME / 'inbox.jsonl').open('a') as f:
         f.write(json.dumps({'at': now_iso(), 'item': item, 'action': action, 'text': text}) + '\n')
@@ -191,7 +193,7 @@ textarea,input[type=text]{width:100%;font:15px/1.5 var(--font-sans);color:var(--
 button{font:inherit;font-size:14px;padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);color:var(--ink-2);cursor:pointer;margin:8px 6px 0 0}
 button:hover{color:var(--ink);border-color:var(--ink-3)}button.pri{background:var(--head-bg);border-color:var(--head-bg);color:var(--head-fg)}.warn{color:var(--warn);font-size:12px;margin-top:6px}
 .post{margin:0 0 8px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--fill);white-space:pre-wrap}.post.agent{border-left:3px solid var(--accent)}
-.am-root{--font-serif:var(--font-sans)!important;font-family:var(--font-sans);background:transparent}.am-root *:not(svg):not(svg *):not(code):not(pre):not(kbd){font-family:var(--font-sans)!important}.am-root svg{max-width:100%;height:auto}.bad{color:var(--err)}tr.sub td{padding-top:12px;border-bottom:0;font-size:12px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}a.ext{font-size:12px;color:var(--ink-3);white-space:nowrap}a.ext:hover{color:var(--accent)}td a.t{color:var(--ink)}td a.t b{color:var(--accent);font:600 13px var(--font-mono)}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
+.am-root{--font-serif:var(--font-sans)!important;font-family:var(--font-sans);background:transparent}.am-root *:not(svg):not(svg *):not(code):not(pre):not(kbd){font-family:var(--font-sans)!important}.am-root svg{max-width:100%;height:auto}.bad{color:var(--err)}tr.sub td{padding-top:12px;border-bottom:0;font-size:12px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}a.ext{font-size:12px;color:var(--ink-3);white-space:nowrap}a.ext:hover{color:var(--accent)}td a.t{color:var(--ink)}td a.t b{color:var(--accent);font:600 13px var(--font-mono)}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.chip.moon{color:var(--accent)}h1 button{font-size:12px;vertical-align:middle;margin:0 0 0 8px}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
 .msg{margin:8px 0;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--paper);white-space:pre-wrap}
 header button{margin-top:0}
 """
@@ -314,7 +316,10 @@ def ticket_page(mid):
         panels.append(X.panel('A', 'Where things stand', X.callout(f'{len(mine)} item{"s" if len(mine) != 1 else ""} waiting for a home.'), wide=True))
     else:
         pr = m.get('product') or {}
-        head = f'<h1><a href="{e(m.get("url"))}">{e(m["id"])}</a> {e(m.get("title"))}</h1>'
+        on = bool(m.get('approved'))
+        head = (f'<h1><a href="{e(m.get("url"))}">{e(m["id"])}</a> {e(m.get("title"))}'
+                f' <button onclick="api(\'/api/action\',{{item:\'{e(m["id"])}\',action:\'approve\',text:\'{"off" if on else "on"}\'}})" title="the night lead works only approved tickets">'
+                f'{"🌙 tonight ✓" if on else "Tonight"}</button></h1>')
         panels.append(X.panel('A', 'Where things stand', X.callout(lead(m, mine), 'warn' if mine else ''), meta=st_badge(m)))   # shares the row with B
         panels.append(X.panel('B', 'Goal', (f'<p>{e(m["goal"])}</p>' if m.get('goal') and not m['goal'].startswith('(') else '<p class="mut">Not read yet. The next sync reads the description and writes the goal here.</p>')
                               + X.kv([('Product ticket', f'<a href="{e(pr.get("url"))}">{e(pr.get("id"))}</a>' if pr.get('id') else '')])))
@@ -341,7 +346,7 @@ def sort_btns(m):
 def row(m, items, tail=None):
     done, n = progress(m)
     return (f'<tr><td><a class="t" href="/t/{e(m["id"])}"><b>{e(m["id"])}</b> {e(m.get("title"))}</a> <a class="ext" href="{e(m.get("url"))}" title="open in Linear">Linear ↗</a></td>'
-            f'<td>{st_badge(m)}{" <span class=chip>⛔ blocked</span>" if blocked(m) else ""}</td><td class="mut">{f"{done}/{n} sub-issues" if n else ""}</td>'
+            f'<td>{st_badge(m)}{" <span class=chip>⛔ blocked</span>" if blocked(m) else ""}{" <span class=chip moon>🌙 tonight</span>" if m.get("approved") else ""}</td><td class="mut">{f"{done}/{n} sub-issues" if n else ""}</td>'
             + '<td class="warn">' + (tail if tail is not None else f'<a href="/t/{e(m["id"])}#{e(items[0]["id"])}">{e(items[0].get("title"))}</a>' if items and items[0].get('kind') == 'work'
                                      else 'needs you: ' + e(items[0].get('title')) if items else e(m.get('next') or '')) + '</td></tr>')
 
@@ -474,6 +479,7 @@ class Handler(BaseHTTPRequestHandler):
             item, action = str(d.get('item', '')), d.get('action')
             if action in ('post', 'answer', 'reject') and not text: return self.send(400, 'needs a reason' if action == 'reject' else 'empty text', 'text/plain')
             if action == 'sort' and text not in ('todo', 'backlog'): return self.send(400, 'todo or backlog', 'text/plain')
+            if action == 'approve' and text not in ('on', 'off'): return self.send(400, 'on or off', 'text/plain')
             if not add_inbox(item, action, text): return self.send(400, 'unknown item or action', 'text/plain')
             if action == 'post': enqueue(f'post {item}', f'post {item}', write=True)
             return self.send(200, 'saved' if action == 'edit' else 'ok', 'text/plain')
@@ -536,6 +542,8 @@ def test():
     h2 = home()
     assert 'New, not sorted' not in h2 and '<b>ENG-21</b>' in h2[h2.index('>Active'):h2.index('Everything else')] and '<b>ENG-22</b>' in h2[h2.index('Everything else'):h2.index('Done recently')], 'sort files the row where the owner said'
     assert ticket_page('ENG-20') and 'Shipped' in ticket_page('ENG-20'), 'done tickets keep their page'
+    assert '>Tonight</button>' in ticket_page('ENG-8') and add_inbox('ENG-8', 'approve', 'on') and 'tonight ✓' in ticket_page('ENG-8') and '🌙 tonight</span>' in home(), 'Tonight toggles approval'
+    assert add_inbox('ENG-8', 'approve', 'off') and '>Tonight</button>' in ticket_page('ENG-8') and '🌙 tonight</span>' not in home()
     (HOME / 'inbox.jsonl').unlink()
     assert '<textarea' not in h, 'home stays calm: no drafts inline'
     t = ticket_page('ENG-1')
