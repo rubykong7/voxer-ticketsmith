@@ -312,7 +312,8 @@ def ticket_page(mid):
         am_css, am = am_panels(pg) if (pg := how_page(mid)) else ('', [])
         if am:   # the tasks file's own panels, diagrams included, as native panels
             for title, body in am:
-                panels.append(X.panel(chr(ord('A') + len(panels)), title or 'How (local)', f'<div class="am-root" data-theme="paper" data-mode="auto">{body}</div>', wide=True))
+                panels.append(X.panel(chr(ord('A') + len(panels)), title or 'How (local)', f'<div class="am-root" data-theme="paper" data-mode="auto">{body}</div>',
+                                      wide='<figure' in body or '<table' in body))   # diagrams and tables get the row; lists pack two per row
         else: panels.append(X.panel('C', 'How (local)', X.how(md), meta='steps, decisions, questions'))
         done, n = progress(m)
         if n: panels.append(X.panel(chr(ord('A') + len(panels)), 'Sub-issues', X.tree(m), meta=f'{done}/{n} done', wide=True))
