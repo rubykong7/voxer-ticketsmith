@@ -42,6 +42,10 @@ The dashboard server (`scripts/server.py`, Python 3.11+ stdlib) runs `claude -p`
 
 Drafts are checked by `scripts/check_draft.py`: banned phrases from your style file, em dashes, bold, and a small Simplified Technical English pass (sentences over 25 words, passive voice, wordy phrases). No extra tools.
 
+## Walkthrough
+
+`docs/walkthrough.html` is a one-page tour (open it in a browser). Its source is `docs/walkthrough.md`; re-render with `node skills/voxer-ticketsmith/scripts/am.mjs render docs/walkthrough.md -o docs/walkthrough.html --no-open`.
+
 ## Credits
 
 The ticket page's look (one screen of lettered panels, verdict first, a tree and a callout) and the STE draft check borrow their ideas from [answer-me-with-html](https://github.com/QingYunA/answer-me-with-html) by QingYunA (MIT). They are re-done in plain Python here. The How panel on each ticket page renders `tasks/<master>.md` with am's single-file CLI, vendored as `scripts/am.mjs` (version in `scripts/AM_UPSTREAM`); it needs Node 20+. The per-ticket thread and the headless-session list come from an earlier personal runner.
