@@ -29,7 +29,7 @@ Open http://127.0.0.1:8790. The first sync starts within a minute.
 
 Optional files in `~/.voxer-ticketsmith/`:
 
-- `config.toml`: `interval_min`, `model`, `port`, `inputs` (`["slack", "voxer"]`), `slack_channels`, `product_teams`, and `read_tools` / `write_tools` if your MCP servers have different names.
+- `config.toml`: `interval_min`, `model`, `port`, `inputs` (`["slack", "voxer"]`), `slack_channels`, `product_teams`, `workspace` (a folder of git repos: branches named after a ticket show on its page, refreshed before each sync), and `read_tools` / `write_tools` if your MCP servers have different names.
 - `style.md`: how your drafts should sound. Start from `skills/voxer-ticketsmith/style.md`. Its `## Never write` list feeds the draft checker.
 
 A new source or task system is one markdown file in `inputs/` or `tasks/` that says which MCP tools to read and how.

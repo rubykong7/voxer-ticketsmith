@@ -4,11 +4,10 @@ Tools: the Slack MCP, read tools only (`slack_search_public_and_private`, `slack
 
 Cursor: `cursors.slack`, a unix timestamp. First run: the last 24 hours.
 
-Read only these, newer than the cursor (pass it as `after`):
+Read only these, newer than the cursor (pass it as `after`, `sort: "timestamp"`, page to the end). `OWNER` is the owner's user id from the search tool's description. A search with no keywords and only `channel_types` returns nothing: do not use it.
 
-1. DMs and group DMs to the owner: `channel_types: "im,mpim"`.
-2. Messages that mention the owner (their user id is in the search tool's description): filter by the mention.
-3. New replies in threads the owner posted in: search `is:thread` with the owner, then `slack_read_thread` for threads with new replies.
-4. Channels named in config `slack_channels`, if any.
+1. DMs, group DMs and threads the owner is in: `filters: "with:<@OWNER>"`, no keywords.
+2. Mentions: `keywords: ["<@OWNER>"]`.
+3. Channels named in config `slack_channels`, if any: `filters: "in:<#CHANNEL>"`.
 
-Skip bot messages unless they quote a ticket the owner works on. For each message keep: channel, author, time, text, permalink. A reply item for Slack always has `target: {"type": "copy"}`.
+Skip bot messages unless they quote a ticket the owner works on. The owner's own messages are facts for `tasks/<master>.md`, never items. For each message keep: channel, author, time, text, permalink. A reply item for Slack always has `target: {"type": "copy"}`.

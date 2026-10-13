@@ -85,7 +85,7 @@ The answer lands in the thread and the page updates. Nothing reaches Linear from
 
 ## H Make it yours
 ```kv
-config.toml: interval_min, model, port, inputs, slack_channels, product_teams
+config.toml: interval_min, model, port, inputs, slack_channels, product_teams, workspace (your repos: ticket branches show on the page)
 style.md: how drafts should sound; its Never write list feeds the checker
 tasks/<ticket>.md: the how, as diagrams; the agent keeps it current
 your own worker: a [[commands]] entry runs your skill on "work on this"; it reads state.json, tasks and threads, and writes a work item back

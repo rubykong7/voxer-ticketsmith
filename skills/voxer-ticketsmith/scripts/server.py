@@ -22,6 +22,7 @@ L, S, V = 'mcp__claude_ai_Linear__', 'mcp__claude_ai_Slack__', 'mcp__voxer__'
 DEFAULTS = {
     'port': 8790, 'interval_min': 60, 'model': 'sonnet', 'run_timeout_min': 30,
     'inputs': ['slack', 'voxer'], 'slack_channels': [], 'product_teams': ['PROD'],
+    'workspace': '',   # a folder of git repos; branches named after a ticket show on its page (local.json, refreshed before each sync)
     'read_tools': [L + t for t in ('list_issues', 'get_issue', 'list_comments', 'get_user', 'list_issue_statuses')]
                   + [S + t for t in ('slack_search_public_and_private', 'slack_read_thread', 'slack_read_channel', 'slack_read_user_profile')]
                   + [V + t for t in ('list_threads', 'list_recent_messages', 'get_message', 'search_messages', 'get_thread')]
@@ -71,6 +72,29 @@ def load_state():
     except FileNotFoundError: _last_good = {}
     except ValueError: pass
     return _last_good
+
+TICKET = re.compile(r'([A-Za-z]{2,}-\d+)')
+def local_check():
+    """local.json: branches named after a ticket in every git repo under config workspace. Facts, no judgment; sync and the pages read it."""
+    ws = config().get('workspace')
+    if not ws: return
+    out, git = {}, lambda d, *a: subprocess.run(['git', '-C', str(d), *a], capture_output=True, text=True, timeout=30).stdout
+    for d in sorted(p for p in Path(ws).expanduser().iterdir() if (p / '.git').is_dir()):
+        try:
+            wt = {}   # branch -> worktree path, from the porcelain list
+            for blk in git(d, 'worktree', 'list', '--porcelain').split('\n\n'):
+                f = dict(l.split(' ', 1) for l in blk.splitlines() if ' ' in l)
+                if 'branch' in f: wt[f['branch'].removeprefix('refs/heads/')] = f['worktree']
+            for l in git(d, 'for-each-ref', '--format=%(refname:short)\t%(objectname:short)\t%(committerdate:short)\t%(upstream:short)\t%(contents:subject)', 'refs/heads').splitlines():
+                br, sha, date, up, subj = l.split('\t', 4)
+                if t := TICKET.search(br):
+                    out.setdefault(t.group(1).upper(), []).append({'repo': d.name, 'branch': br, 'sha': sha, 'date': date, 'pushed': bool(up), 'subject': subj[:120], 'worktree': wt.get(br, '')})
+        except (subprocess.SubprocessError, ValueError) as x: print(f'local check {d.name}: {x}', file=sys.stderr)
+    (HOME / 'local.json').write_text(json.dumps({'checked_at': now_iso(), 'branches': out}, indent=1))
+
+def local_branches(mid):
+    try: return json.loads((HOME / 'local.json').read_text()).get('branches', {}).get(mid, [])
+    except (FileNotFoundError, ValueError): return []
 
 def inbox():
     try: lines = (HOME / 'inbox.jsonl').read_text().splitlines()
@@ -165,7 +189,9 @@ def worker():
         while lock_busy(): time.sleep(30)
         RUNNING.update(name=name, started=time.time())
         if name == 'sync': LAST_TRY['sync'] = time.time()
-        try: run(name, cmd, write, custom)
+        try:
+            if name == 'sync': local_check()
+            run(name, cmd, write, custom)
         except Exception as x: print(f'run {name} failed: {x}', file=sys.stderr)
         finally: RUNNING.clear(); (HOME / 'run.lock').unlink(missing_ok=True)
 
@@ -320,7 +346,9 @@ def ticket_page(mid):
         head = (f'<h1><a href="{e(m.get("url"))}">{e(m["id"])}</a> {e(m.get("title"))}'
                 f' <button onclick="api(\'/api/action\',{{item:\'{e(m["id"])}\',action:\'approve\',text:\'{"off" if on else "on"}\'}})" title="the night lead works only approved tickets">'
                 f'{"🌙 tonight ✓" if on else "Tonight"}</button></h1>')
-        panels.append(X.panel('A', 'Where things stand', X.callout(lead(m, mine), 'warn' if mine else ''), meta=st_badge(m)))   # shares the row with B
+        local = ''.join(f'<li><code>{e(b["repo"])}</code> {e(b["branch"])} <span class="mut">{e(b["sha"])} · {e(b["date"])} · {"pushed" if b["pushed"] else "local only"}'
+                        f'{" · worktree" if b["worktree"] else ""}</span><div class="mut">{e(b["subject"])}</div></li>' for b in local_branches(mid))
+        panels.append(X.panel('A', 'Where things stand', X.callout(lead(m, mine), 'warn' if mine else '') + (f'<ul class="local">{local}</ul>' if local else ''), meta=st_badge(m)))   # shares the row with B
         panels.append(X.panel('B', 'Goal', (f'<p>{e(m["goal"])}</p>' if m.get('goal') and not m['goal'].startswith('(') else '<p class="mut">Not read yet. The next sync reads the description and writes the goal here.</p>')
                               + X.kv([('Product ticket', f'<a href="{e(pr.get("url"))}">{e(pr.get("id"))}</a>' if pr.get('id') else '')])))
         am_css, am = am_panels(pg) if (pg := how_page(mid)) else ('', [])
@@ -346,7 +374,8 @@ def sort_btns(m):
 def row(m, items, tail=None):
     done, n = progress(m)
     return (f'<tr><td><a class="t" href="/t/{e(m["id"])}"><b>{e(m["id"])}</b> {e(m.get("title"))}</a> <a class="ext" href="{e(m.get("url"))}" title="open in Linear">Linear ↗</a></td>'
-            f'<td>{st_badge(m)}{" <span class=chip>⛔ blocked</span>" if blocked(m) else ""}{" <span class=chip moon>🌙 tonight</span>" if m.get("approved") else ""}</td><td class="mut">{f"{done}/{n} sub-issues" if n else ""}</td>'
+            f'<td>{st_badge(m)}{" <span class=chip>⛔ blocked</span>" if blocked(m) else ""}{" <span class=chip moon>🌙 tonight</span>" if m.get("approved") else ""}'
+            f'{f" <span class=chip title={chr(34)}local branches{chr(34)}>⎇ {len(lb)}</span>" if (lb := local_branches(m["id"])) else ""}</td><td class="mut">{f"{done}/{n} sub-issues" if n else ""}</td>'
             + '<td class="warn">' + (tail if tail is not None else f'<a href="/t/{e(m["id"])}#{e(items[0]["id"])}">{e(items[0].get("title"))}</a>' if items and items[0].get('kind') == 'work'
                                      else 'needs you: ' + e(items[0].get('title')) if items else e(m.get('next') or '')) + '</td></tr>')
 
@@ -588,6 +617,13 @@ def test():
     (HOME / 'state.json').write_text('{"half')
     assert 'ENG-8' in home(), 'half-written state.json must fall back to the last good copy'
     assert enqueue('sync', 'sync') == 'started' and enqueue('sync', 'sync') == 'already queued'
+    ws = Path(tempfile.mkdtemp()); (ws / 'srv').mkdir(); (ws / 'notgit').mkdir()
+    for a in (['init', '-q', '-b', 'main'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'ENG-1: added the test'], ['branch', 'fix/eng-1-export'], ['branch', 'topic']):
+        subprocess.run(['git', '-C', str(ws / 'srv'), *a], check=True, capture_output=True)
+    (HOME / 'config.toml').write_text(f'workspace = "{ws}"\n'); local_check()
+    lb = json.loads((HOME / 'local.json').read_text())['branches']
+    assert list(lb) == ['ENG-1'] and lb['ENG-1'][0]['branch'] == 'fix/eng-1-export' and lb['ENG-1'][0]['pushed'] is False and lb['ENG-1'][0]['worktree'] == '', lb
+    assert 'fix/eng-1-export' in ticket_page('ENG-1') and 'local only' in ticket_page('ENG-1') and '⎇ 1' in home() and '⎇' not in ticket_page('ENG-8'), 'local branches on the page and the row'
     print('ok')
 
 if __name__ == '__main__':

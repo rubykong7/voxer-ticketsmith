@@ -15,11 +15,12 @@ Linear holds the goal. This skill holds the how, locally, and keeps the two in s
 
 | File | Written by | What |
 |---|---|---|
-| `config.toml` | owner | optional; keys in `scripts/server.py` DEFAULTS (`inputs`, `slack_channels`, `product_teams`, `model`, `interval_min`, `port`) |
+| `config.toml` | owner | optional; keys in `scripts/server.py` DEFAULTS (`inputs`, `slack_channels`, `product_teams`, `workspace`, `model`, `interval_min`, `port`) |
 | `style.md` | owner | optional; overrides the skill's `style.md` for drafts |
 | `state.json` | you (Claude) only | everything the dashboard shows; schema below |
 | `inbox.jsonl` | dashboard only | owner clicks, one JSON per line: `{"at","item","action","text"}`, action is `edit`, `post`, `resolve`, `reject`, `answer`, `sort` (`item` is a master id, `text` is `todo` or `backlog`) or `approve` (`item` is a master id, `text` is `on` or `off`) |
 | `inbox.done.jsonl` | you | inbox lines you applied, appended in order |
+| `local.json` | dashboard only | before each sync, when config `workspace` names a folder of repos: `branches` by ticket id, each `{repo, branch, sha, date, pushed, subject, worktree}` |
 | `threads/<card>.md` | both (append only) | owner and agent posts: `## you · <time>` / `## agent · <time>` then the text |
 | `tasks/<master>.md` | you | the how for one master, as an answer-me-with-html draft (format below); the dashboard renders it as a sheet of diagrams |
 | `run.lock` | whoever runs | `{"name","started"}` while a command runs |
@@ -125,6 +126,7 @@ Run hourly by the dashboard. Read-only outside the home folder. No Bash.
    - Only local changed (a decision in `tasks/<master>.md` that changes the goal or structure and is not marked published): add a `change` item with the exact `linear_issue` edit or a `linear_comment` that explains it.
    - Both changed: add a `drift` item that shows both sides and ask the owner.
 3. Inputs: for each name in config `inputs` (default `slack`, `voxer`), follow `inputs/<name>.md` if you have its MCP tools; skip it silently if not. Read only messages newer than its cursor. Then judge each message (below). New Linear comments from others on the owner's masters and subs go through the same judgment.
+   Local: read `local.json` if it exists. A branch named after a master is a fact about progress: `next` then says what remains (finish, push, review, merge), never "start". The ticket page shows the branches itself. Branch names stay local: never in a draft, an item title or Linear.
 4. Relevance. Compare each message with the active masters (title and goal). It is relevant only if it changes a goal or scope, makes or reverses a decision, adds a requirement or bug, asks the owner to do or answer something, blocks or unblocks work, or sets a deadline.
    - Relevant and clear: add a `reply` item (with a draft) when it asks the owner something; add a `change` item when it changes a goal, scope or structure; otherwise add the fact to `tasks/<master>.md` and add no item.
    - Mentions an active master but you can't tell what changed: add a `question` item.
