@@ -95,7 +95,7 @@ One or two sentences under the diagram: what the picture does not say.
 - threads/ENG-8692.md
 ```
 
-Rules: one diagram panel at least (`flow` for what talks to what, `sequence` for messages over time, `tree` for files or pieces; mark changes with `+ `, `- `, `~ `). Only things you read in code or notes; never invent a box. `node scripts/am.mjs help flow` (or `tree`, `sequence`) shows the syntax; `node scripts/am.mjs lint <file>` checks the text. Panel letters are optional. Lists stay short; the diagram carries the structure.
+Rules: in `flow`, the bracket text is the node's identity, so name a node once and write it the same way every time (`[Export job]`, never `[Export job | path]` on one line and `[Export job]` on another); file paths go in the text under the diagram. One diagram panel at least (`flow` for what talks to what, `sequence` for messages over time, `tree` for files or pieces; mark changes with `+ `, `- `, `~ `). Only things you read in code or notes; never invent a box. `node scripts/am.mjs help flow` (or `tree`, `sequence`) shows the syntax; `node scripts/am.mjs lint <file>` checks the text. Panel letters are optional. Lists stay short; the diagram carries the structure.
 
 ## Every command starts like this
 
