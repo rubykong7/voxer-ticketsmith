@@ -30,8 +30,10 @@ DEFAULTS = {
     # custom thread commands: [[commands]] match (regex on the owner's post), skill, tools, deny, cwd, timeout_min
     'commands': [],
 }
-STATUS_TYPE = {'In Progress': 'started', 'In Review': 'started', 'In Testing': 'started', 'Todo': 'unstarted', 'Triage': 'triage', 'Backlog': 'backlog'}
-ACTIONS = {'edit', 'post', 'resolve', 'reject', 'answer'}
+STATUS_TYPE = {'In Progress': 'started', 'In Review': 'started', 'In Testing': 'started', 'Todo': 'unstarted', 'Triage': 'triage', 'Backlog': 'backlog',
+               'Done': 'completed', 'Canceled': 'canceled', 'Duplicate': 'canceled'}
+DONE = ('completed', 'canceled')
+ACTIONS = {'edit', 'post', 'resolve', 'reject', 'answer', 'sort'}
 CARD_RE = re.compile(r'^(inbox|[A-Z][A-Z0-9]*-\d+)$')
 PAGE_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*\.html$')
 POST_RE = re.compile(r'^## (you|agent) · (.+)$', re.M)
@@ -80,12 +82,18 @@ def inbox():
 
 def view():
     """state plus clicks Claude hasn't applied yet, so the page reflects them at once."""
-    st = load_state()
+    st = dict(load_state())
+    if st: st['masters'] = [dict(m) for m in st.get('masters') or []]
+    masters = {m['id']: m for m in st.get('masters') or [] if m.get('id')}
     items = {i['id']: dict(i) for i in st.get('items', []) if i.get('id')}
     for a in inbox():
+        k = a.get('action')
+        if k == 'sort':
+            m = masters.get(a.get('item'))
+            if m: m.pop('new', None); m['sorted'] = a.get('text')
+            continue
         i = items.get(a.get('item'))
         if not i: continue
-        k = a.get('action')
         if k == 'edit': i['draft'] = a.get('text', '')
         elif k == 'resolve': i['status'] = 'resolved'
         elif k == 'reject': i['status'] = 'rejected'
@@ -95,7 +103,8 @@ def view():
 
 def add_inbox(item, action, text=''):
     st = load_state()
-    if action not in ACTIONS or item not in {i.get('id') for i in st.get('items', [])}: return False
+    known = {m.get('id') for m in st.get('masters', [])} if action == 'sort' else {i.get('id') for i in st.get('items', [])}
+    if action not in ACTIONS or item not in known: return False
     with (HOME / 'inbox.jsonl').open('a') as f:
         f.write(json.dumps({'at': now_iso(), 'item': item, 'action': action, 'text': text}) + '\n')
     return True
@@ -249,6 +258,7 @@ def thread_html(card):
             f'<button onclick="api(\'/api/reply\',{{card:\'{c}\',text:val(\'t-{c}\'),now:false}})">Save for next sync</button>')
 
 def kind_of(m): return m.get('statusType') or STATUS_TYPE.get(m.get('status'), 'other')
+def bucket(m): return {'todo': 'unstarted', 'backlog': 'backlog'}.get(m.get('sorted')) or kind_of(m)   # where the owner filed it on the dashboard, else Linear
 
 def st_badge(m): return f'<span class="st {e(kind_of(m))}">{e(m.get("status"))}</span>'
 
@@ -325,17 +335,20 @@ def blocked(m):
     subs = [x for x in m.get('subs') or [] if x.get('statusType') not in ('completed', 'canceled')]
     return bool(subs) and all(x.get('blockedBy') for x in subs)
 
-def row(m, items):
+def sort_btns(m):
+    return ''.join(f'<button onclick="api(\'/api/action\',{{item:\'{e(m["id"])}\',action:\'sort\',text:\'{t}\'}})">{t.title()}</button>' for t in ('todo', 'backlog'))
+
+def row(m, items, tail=None):
     done, n = progress(m)
     return (f'<tr><td><a class="t" href="/t/{e(m["id"])}"><b>{e(m["id"])}</b> {e(m.get("title"))}</a> <a class="ext" href="{e(m.get("url"))}" title="open in Linear">Linear ↗</a></td>'
             f'<td>{st_badge(m)}{" <span class=chip>⛔ blocked</span>" if blocked(m) else ""}</td><td class="mut">{f"{done}/{n} sub-issues" if n else ""}</td>'
-            + '<td class="warn">' + (f'<a href="/t/{e(m["id"])}#{e(items[0]["id"])}">{e(items[0].get("title"))}</a>' if items and items[0].get('kind') == 'work'
+            + '<td class="warn">' + (tail if tail is not None else f'<a href="/t/{e(m["id"])}#{e(items[0]["id"])}">{e(items[0].get("title"))}</a>' if items and items[0].get('kind') == 'work'
                                      else 'needs you: ' + e(items[0].get('title')) if items else e(m.get('next') or '')) + '</td></tr>')
 
-def section(title, ms, by, note='', groups=None):
-    """groups: [(subhead, [masters])] draws a subhead row before each non-empty group."""
+def section(title, ms, by, note='', groups=None, tail=None):
+    """groups: [(subhead, [masters])] draws a subhead row before each non-empty group. tail(m): html for the last cell."""
     gs = [(g, gm) for g, gm in (groups or [('', ms)]) if gm]
-    rows = ''.join((f'<tr class="sub"><td colspan="4">{e(g)} <span class="mut">{len(gm)}</span></td></tr>' if g and len(gs) > 1 else '') + ''.join(row(m, by(m['id'])) for m in gm)
+    rows = ''.join((f'<tr class="sub"><td colspan="4">{e(g)} <span class="mut">{len(gm)}</span></td></tr>' if g and len(gs) > 1 else '') + ''.join(row(m, by(m['id']), tail and tail(m)) for m in gm)
                    for g, gm in gs)   # subheads only when there is more than one group to tell apart
     return f'<section class="card"><h2>{e(title)} <span class="mut">{note or len(ms)}</span></h2><table>{rows}</table></section>' if ms else ''
 
@@ -343,7 +356,8 @@ def home():
     st, items = view()
     all_open = [i for i in items.values() if i.get('status', 'open') == 'open']
     open_items = [i for i in all_open if i.get('kind') != 'work']   # work items are reviews: they go under Ready, not Needs you
-    masters = st.get('masters') or []
+    done = sorted((m for m in st.get('masters') or [] if kind_of(m) in DONE), key=lambda m: m.get('updatedAt') or '', reverse=True)
+    masters = [m for m in st.get('masters') or [] if kind_of(m) not in DONE]
     ids = {m['id'] for m in masters}
     by = lambda mid: [i for i in open_items if i.get('master') == mid]
     synced = ts(st.get('synced_at', ''))
@@ -353,11 +367,12 @@ def home():
             f'<button onclick="api(\'/api/sync\',{{}},this)">Sync now</button><a href="/sessions">Agent sessions</a><button onclick="theme()" title="light / dark">◐ theme</button></header>')
     started = [m for m in masters if kind_of(m) == 'started']
     if not st: return page('ticketsmith', head + '<p class="lead">No sync yet. The first one starts within a minute; this page refreshes when it lands.</p>')
-    active = [m for m in masters if kind_of(m) in ('started', 'unstarted')]
     work = {i['master']: i for i in all_open if i.get('kind') == 'work' and i.get('master') in ids}
     ready = [m for m in masters if m['id'] in work or m.get('status') == 'In Review']   # ready for review: a branch to look at, or Linear says so; any status
+    fresh = [m for m in masters if m.get('new') and bucket(m) != 'started' and m not in ready]   # appeared since the last sync, not yet filed
+    active = [m for m in masters if bucket(m) in ('started', 'unstarted') and m not in fresh]
     summary = (f'{len(open_items)} thing{"s" if len(open_items) != 1 else ""} need{"s" if len(open_items) == 1 else ""} you. ' if open_items else 'Nothing needs you. ') \
-              + f'{len(ready)} ready for review, {len(started)} in progress.'
+              + f'{len(ready)} ready for review, {len(started)} in progress.' + (f' {len(fresh)} new to sort.' if fresh else '')
     body = [head, f'<p class="lead">{summary}</p>']
     if open_items:
         urls = {m['id']: m.get('url') for m in masters}
@@ -369,14 +384,16 @@ def home():
         li = ''.join(needs_row(i) for i in open_items)
         body.append(f'<section class="card needs"><h2>Needs you</h2><ul class="rows">{li}</ul></section>')
     rest_active = [m for m in active if m not in ready]
-    groups = [('In progress', [m for m in rest_active if kind_of(m) == 'started']), ('Blocked', [m for m in rest_active if kind_of(m) != 'started' and blocked(m)]),
-              ('Todo', [m for m in rest_active if kind_of(m) != 'started' and not blocked(m)])]
+    groups = [('In progress', [m for m in rest_active if bucket(m) == 'started']), ('Blocked', [m for m in rest_active if bucket(m) != 'started' and blocked(m)]),
+              ('Todo', [m for m in rest_active if bucket(m) != 'started' and not blocked(m)])]
+    body.append(section('New, not sorted yet', fresh, by, tail=sort_btns))
     body.append(section('Ready for review', ready, lambda mid: [work[mid]] if mid in work else []))
     body.append(section('Active', rest_active, by, groups=groups))
-    rest = sorted((m for m in masters if m not in active and m not in ready), key=lambda m: {'triage': 0, 'backlog': 1}.get(kind_of(m), 2))
-    if rest:
-        body.append(f'<details class="card"><summary>Everything else / backlog <span class="mut">{len(rest)}</span></summary>'
-                    f'<table>{"".join(row(m, by(m["id"])) for m in rest)}</table></details>')
+    rest = sorted((m for m in masters if m not in active and m not in ready and m not in fresh), key=lambda m: {'triage': 0, 'backlog': 1}.get(bucket(m), 2))
+    for name, ms in (('Everything else / backlog', rest), ('Done recently', done)):
+        if ms:
+            body.append(f'<details class="card"><summary>{name} <span class="mut">{len(ms)}</span></summary>'
+                        f'<table>{"".join(row(m, by(m["id"])) for m in ms)}</table></details>')
     ign = st.get('ignored') or [] if st.get('ignored_day') == time.strftime('%Y-%m-%d') else []
     if ign:
         body.append(f'<details class="card"><summary class="mut">Ignored today ({len(ign)})</summary><ul>'
@@ -456,6 +473,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/action':
             item, action = str(d.get('item', '')), d.get('action')
             if action in ('post', 'answer', 'reject') and not text: return self.send(400, 'needs a reason' if action == 'reject' else 'empty text', 'text/plain')
+            if action == 'sort' and text not in ('todo', 'backlog'): return self.send(400, 'todo or backlog', 'text/plain')
             if not add_inbox(item, action, text): return self.send(400, 'unknown item or action', 'text/plain')
             if action == 'post': enqueue(f'post {item}', f'post {item}', write=True)
             return self.send(200, 'saved' if action == 'edit' else 'ok', 'text/plain')
@@ -493,7 +511,9 @@ def test():
     st = json.loads((HOME / 'state.json').read_text())
     st['masters'] += [{'id': 'ENG-7', 'title': 'Someday', 'status': 'Backlog'}, {'id': 'ENG-8', 'title': 'Now', 'status': 'In Progress', 'next': 'write the test'},
                       {'id': 'ENG-11', 'title': 'Reviewing', 'status': 'In Review'}, {'id': 'ENG-12', 'title': 'Triaged work', 'status': 'Triage'},
-                      {'id': 'ENG-9', 'title': 'Stuck', 'status': 'Todo', 'subs': [{'id': 'ENG-10', 'statusType': 'unstarted', 'blockedBy': ['ENG-2']}]}]
+                      {'id': 'ENG-9', 'title': 'Stuck', 'status': 'Todo', 'subs': [{'id': 'ENG-10', 'statusType': 'unstarted', 'blockedBy': ['ENG-2']}]},
+                      {'id': 'ENG-20', 'title': 'Shipped', 'status': 'Done', 'statusType': 'completed', 'updatedAt': '2026-10-12'},
+                      {'id': 'ENG-21', 'title': 'Fresh backlog', 'status': 'Backlog', 'new': True}, {'id': 'ENG-22', 'title': 'Fresh todo', 'status': 'Todo', 'new': True}]
     st['items'] += [{'id': 'i-w', 'master': 'ENG-8', 'kind': 'work', 'title': 'ENG-8: added the test', 'status': 'open'},
                     {'id': 'i-w2', 'master': 'ENG-12', 'kind': 'work', 'title': 'ENG-12: branch', 'status': 'open'}]
     (HOME / 'state.json').write_text(json.dumps(st))
@@ -508,7 +528,15 @@ def test():
     assert '<b>ENG-12</b>' in ready and '<b>ENG-12</b>' not in h[h.index('Everything else'):], 'a Triage ticket with a work item is Ready, not backlog'
     assert '⛔ blocked' in act and 'ENG-7' in h[h.index('Everything else'):]
     assert 'Needs you' in h and 'Patrick asks &lt;b&gt;' in h and 'done one' not in h, h
-    assert '3 things need you. 3 ready for review, 3 in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
+    assert '3 things need you. 3 ready for review, 3 in progress. 2 new to sort.' in h and '/t/ENG-1' in h and '/t/inbox' in h
+    new = h[h.index('New, not sorted'):h.index('Ready for review')]
+    assert h.index('Needs you') < h.index('New, not sorted') and '<b>ENG-21</b>' in new and '<b>ENG-22</b>' in new and new.count('>Todo</button>') == 2, 'new masters sit on top with sort buttons'
+    assert '<b>ENG-22</b>' not in h[h.index('>Active'):] and 'Done recently' in h and '<b>ENG-20</b>' in h[h.index('Done recently'):] and '<b>ENG-20</b>' not in h[:h.index('Done recently')]
+    assert add_inbox('ENG-21', 'sort', 'todo') and add_inbox('ENG-22', 'sort', 'backlog') and not add_inbox('ENG-99', 'sort', 'todo')
+    h2 = home()
+    assert 'New, not sorted' not in h2 and '<b>ENG-21</b>' in h2[h2.index('>Active'):h2.index('Everything else')] and '<b>ENG-22</b>' in h2[h2.index('Everything else'):h2.index('Done recently')], 'sort files the row where the owner said'
+    assert ticket_page('ENG-20') and 'Shipped' in ticket_page('ENG-20'), 'done tickets keep their page'
+    (HOME / 'inbox.jsonl').unlink()
     assert '<textarea' not in h, 'home stays calm: no drafts inline'
     t = ticket_page('ENG-1')
     assert '1 of 2 sub-issues done' in t and '⛔ after ENG-2' in t and 'Post to ENG-1' in t and '2 things need you.' in t and t.count('class="panel') == 6, t

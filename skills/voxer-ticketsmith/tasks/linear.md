@@ -4,14 +4,15 @@ Tools: the Linear MCP (`list_issues`, `get_issue`, `list_comments`, `get_user`; 
 
 ## Build `masters`
 
-1. `list_issues` with `assignee: "me"`, `limit: 100`, fields `id, title, url, status, statusType, parentId, updatedAt, assignee, team`. Drop `completed` and `canceled`.
+1. `list_issues` with `assignee: "me"`, `limit: 100`, fields `id, title, url, status, statusType, parentId, updatedAt, assignee, team`. Drop `completed` and `canceled` issues whose `updatedAt` is more than 30 days before `Now`; keep the recent ones, the dashboard files them under Done recently and their pages keep working.
 2. An issue with a `parentId` belongs to that parent: the parent is the master. An issue with no parent is its own master.
+   - Carry `new` and `sorted` over from the stored master. A master that is not in the stored `masters` gets `new: true`, unless there was no stored state (first sync). Drop `sorted` when the status changed in Linear since the last sync: Linear now says where it goes.
 3. For each master: `list_issues` with `parentId: <master>` (same fields) for its subs, all assignees. `mine` is true when the sub is assigned to the owner.
 4. `get_issue` with `includeRelations: true` for every master whose stored `goal` is empty, and for every master or sub whose `updatedAt` moved. At most 10 per sync, started and todo first; the rest catch up on later syncs. A master with an empty `goal` is unread even when nothing changed in Linear.
    - `goal`: the end goal from the description in one line.
    - `product`: the related issue whose team key is in config `product_teams` (default `PROD`).
    - `blockedBy` on subs: from `blocks` relations only.
-5. `next`: the first open sub that is not blocked, or the first open Step in `tasks/<master>.md`.
+5. `next`: the first open sub that is not blocked, or the first open Step in `tasks/<master>.md`. Empty for done masters.
 6. New comments since the stored `updatedAt`: `list_comments` on the changed issue. Comments by others go through the relevance check.
 
 ## Ticket shape (for `change` items you draft)

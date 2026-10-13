@@ -32,11 +32,13 @@ Install first: clone the repo and symlink `skills/voxer-ticketsmith` into `~/.cl
 ```tree
 Home
   Needs you | items with a draft or a question, newest first
+  New, not sorted yet | tickets that appeared since the last sync; file each as Todo or Backlog
   Ready for review | a branch to look at, or In Review in Linear
   Active | In progress, Blocked, Todo
   Everything else | Triage and Backlog, collapsed
+  Done recently | closed in the last 30 days, collapsed; pages and threads stay
 ```
-The lead sentence at the top is the whole status. Each row opens the ticket page; the small Linear link opens Linear.
+The lead sentence at the top is the whole status. Each row opens the ticket page; the small Linear link opens Linear. The Todo and Backlog buttons file a ticket on this page only; its Linear status does not change.
 
 ## D Ticket page
 ```tree
