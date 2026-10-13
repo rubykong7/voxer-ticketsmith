@@ -288,7 +288,7 @@ def ticket_page(mid):
     else:
         pr = m.get('product') or {}
         head = f'<h1><a href="{e(m.get("url"))}">{e(m["id"])}</a> {e(m.get("title"))}</h1>'
-        panels.append(X.panel('A', 'Where things stand', X.callout(lead(m, mine), 'warn' if mine else ''), meta=st_badge(m), wide=True))
+        panels.append(X.panel('A', 'Where things stand', X.callout(lead(m, mine), 'warn' if mine else ''), meta=st_badge(m)))   # shares the row with B
         panels.append(X.panel('B', 'Goal', (f'<p>{e(m["goal"])}</p>' if m.get('goal') and not m['goal'].startswith('(') else '<p class="mut">Not read yet. The next sync reads the description and writes the goal here.</p>')
                               + X.kv([('Product ticket', f'<a href="{e(pr.get("url"))}">{e(pr.get("id"))}</a>' if pr.get('id') else '')])))
         try: md = (HOME / 'tasks' / f'{mid}.md').read_text()
