@@ -36,6 +36,42 @@ A new source or task system is one markdown file in `inputs/` or `tasks/` that s
 
 A thread post can start a skill of your own: add a `[[commands]]` entry to `config.toml` with `match` (a regex on the post), `skill`, and optionally `tools`, `deny`, `cwd` and `timeout_min`. The run gets the card name and can add items to the ticket page.
 
+## Bring your own worker
+
+The dashboard is the queue and the inbox; the agent that does the work is yours. The contract, all in `~/.voxer-ticketsmith/`:
+
+Read:
+- `state.json`: `masters`, each with `goal`, `next`, `subs`, and `approved` (the date you clicked Tonight on its page). Tonight's queue is every master with `approved` set.
+- `tasks/<ticket>.md`: steps, decisions, open questions, diagrams.
+- `threads/<ticket>.md`: your last post is the brief.
+
+Write:
+- `state.json` `items`: one `work` item per run (schema in the SKILL), with a `page` in `pages/` if you render one. The ticket moves to Ready for review.
+- `threads/<ticket>.md`: append `## agent · <time>` posts; one per phase shows progress on the ticket page while the run goes.
+- `tasks/<ticket>.md`: tick steps, add decisions and questions, keep the diagram true.
+- Never Linear, Slack or Voxer, never a push. Nothing leaves the machine unless you click.
+
+Start it from a thread post:
+
+```toml
+[[commands]]
+match = "^\\s*(work on (this|it)|work:)"
+skill = "my-worker"            # your skill, or a wrapper around any CLI agent
+tools = ["Edit", "Write", "Bash", "Agent"]
+deny = ["Bash(git push:*)", "Bash(gh:*)"]
+cwd = "~/code"
+timeout_min = 120
+```
+
+Or on a schedule, with the same entry and no typing: a post on the `inbox` card starts the run, so a cron or launchd job can do it (the post lands in the inbox thread as a record):
+
+```sh
+curl -s -X POST -H 'X-Dash: 1' -H 'Content-Type: application/json' \
+  -d '{"card":"inbox","text":"work on this: tonight"}' http://127.0.0.1:8790/api/reply
+```
+
+Your skill decides what `tonight` means; the obvious reading is "every master with `approved`, `next` first".
+
 ## How it runs
 
 The dashboard server (`scripts/server.py`, Python 3.11+ stdlib) runs `claude -p` one at a time: `sync` every interval, `post <item>` when you click Post, `reply <card>` when you send a thread message. Only `post` gets Linear write tools. Each run shows up under Sessions with a resume command.

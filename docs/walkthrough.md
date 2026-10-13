@@ -88,5 +88,6 @@ The answer lands in the thread and the page updates. Nothing reaches Linear from
 config.toml: interval_min, model, port, inputs, slack_channels, product_teams
 style.md: how drafts should sound; its Never write list feeds the checker
 tasks/<ticket>.md: the how, as diagrams; the agent keeps it current
+your own worker: a [[commands]] entry runs your skill on "work on this"; it reads state.json, tasks and threads, and writes a work item back
 ```
-Both files are optional and live in `~/.voxer-ticketsmith/`.
+Both files are optional and live in `~/.voxer-ticketsmith/`. The README section Bring your own worker has the full contract and a cron line for a nightly run over the tickets you marked Tonight.
