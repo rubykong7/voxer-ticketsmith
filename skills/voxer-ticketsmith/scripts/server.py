@@ -115,7 +115,7 @@ def add_post(card, text):
         f.write(f'## you · {time.strftime("%Y-%m-%d %H:%M")}\n{text.strip()}\n\n')
 
 # ---------- runs: one claude -p at a time ----------
-Q, RUNNING, LAST_TRY = queue.Queue(), {}, {'sync': 0.0}
+Q, RUNNING, LAST_TRY, LAST_FAIL = queue.Queue(), {}, {'sync': 0.0}, {}   # LAST_FAIL: name, rc, at of the newest bad run
 
 def prompt(cmd): return f'Use the voxer-ticketsmith skill. Command: {cmd}. Home: {HOME}. Now: {now_iso()} (use this for every timestamp and cursor; never guess the time).'
 
@@ -148,6 +148,8 @@ def run(name, cmd, write, custom=None):
         try: rc = p.wait(timeout=timeout)
         except subprocess.TimeoutExpired: p.kill(); rc = 'timeout'
         log.write(f'== {time.strftime("%H:%M:%S")} {name} exit {rc}\n')
+    if rc == 0: LAST_FAIL.pop(name.split()[0], None)
+    else: LAST_FAIL[name.split()[0]] = {'name': name, 'rc': rc, 'at': time.time()}
 
 def worker():
     while True:
@@ -183,7 +185,7 @@ textarea,input[type=text]{width:100%;font:15px/1.5 var(--font-sans);color:var(--
 button{font:inherit;font-size:14px;padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);color:var(--ink-2);cursor:pointer;margin:8px 6px 0 0}
 button:hover{color:var(--ink);border-color:var(--ink-3)}button.pri{background:var(--head-bg);border-color:var(--head-bg);color:var(--head-fg)}.warn{color:var(--warn);font-size:12px;margin-top:6px}
 .post{margin:0 0 8px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--fill);white-space:pre-wrap}.post.agent{border-left:3px solid var(--accent)}
-.am-root{--font-serif:var(--font-sans)!important;font-family:var(--font-sans);background:transparent}.am-root *:not(svg):not(svg *){font-family:var(--font-sans)!important}.am-root code,.am-root pre,.am-root kbd{font-family:var(--font-mono)}.am-root svg{max-width:100%;height:auto}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
+.am-root{--font-serif:var(--font-sans)!important;font-family:var(--font-sans);background:transparent}.am-root *:not(svg):not(svg *){font-family:var(--font-sans)!important}.am-root code,.am-root pre,.am-root kbd{font-family:var(--font-mono)}.am-root svg{max-width:100%;height:auto}.bad{color:var(--err)}a.ext{font-size:12px;color:var(--ink-3);white-space:nowrap}a.ext:hover{color:var(--accent)}td a.t{color:var(--ink)}td a.t b{color:var(--accent);font:600 13px var(--font-mono)}.post .mut{font-size:12px}details summary{cursor:pointer}.chip{font-size:11px;color:var(--err);white-space:nowrap}.rows{list-style:none;margin:0;padding:0}.rows li{display:flex;gap:16px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line-2)}.rows li:last-child{border:0}.rows li>div{flex:1}.rows .go{white-space:nowrap}pre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--font-mono)}
 .msg{margin:8px 0;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--radius);background:var(--paper);white-space:pre-wrap}
 header button{margin-top:0}
 """
@@ -237,7 +239,7 @@ def item_html(i):
     if not i.get('pending'):
         h.append(f'<div><button onclick="act(\'{iid}\',\'resolve\')">Resolve</button>'
                  f'<input type="text" id="r-{iid}" placeholder="Reason to reject (it won\'t be suggested again)" style="width:60%">'
-                 f'<button onclick="act(\'{iid}\',\'reject\',\'r-{iid}\')">Reject</button></div>')
+                 f'<button onclick="act(\'{iid}\',\'reject\',\'r-{iid}\',this)">Reject</button></div>')
     return ''.join(h) + '</div>'
 
 def thread_html(card):
@@ -246,7 +248,7 @@ def thread_html(card):
                     for who, at, txt in ps)
     c = e(card)
     return (f'{posts or "<p class=mut>No posts yet.</p>"}<textarea id="t-{c}" rows="2" placeholder="e.g. shorten the draft, drop step 2, add a sub-issue for X"></textarea>'
-            f'<button onclick="api(\'/api/reply\',{{card:\'{c}\',text:val(\'t-{c}\'),now:true}})">Send now</button>'
+            f'<button class="pri" onclick="api(\'/api/reply\',{{card:\'{c}\',text:val(\'t-{c}\'),now:true}})">Send now</button>'
             f'<button onclick="api(\'/api/reply\',{{card:\'{c}\',text:val(\'t-{c}\'),now:false}})">Save for next sync</button>')
 
 def kind_of(m): return m.get('statusType') or STATUS_TYPE.get(m.get('status'), 'other')
@@ -327,7 +329,7 @@ def blocked(m):
 
 def row(m, items):
     done, n = progress(m)
-    return (f'<tr><td><a href="{e(m.get("url"))}" title="open in Linear">{e(m["id"])}</a> <a class="t" href="/t/{e(m["id"])}">{e(m.get("title"))}</a></td>'
+    return (f'<tr><td><a class="t" href="/t/{e(m["id"])}"><b>{e(m["id"])}</b> {e(m.get("title"))}</a> <a class="ext" href="{e(m.get("url"))}" title="open in Linear">Linear ↗</a></td>'
             f'<td>{st_badge(m)}{" <span class=chip>⛔ blocked</span>" if blocked(m) else ""}</td><td class="mut">{f"{done}/{n} sub-issues" if n else ""}</td>'
             + '<td class="warn">' + (f'<a href="/t/{e(m["id"])}#{e(items[0]["id"])}">{e(items[0].get("title"))}</a>' if items and items[0].get('kind') == 'work'
                                      else 'needs you: ' + e(items[0].get('title')) if items else e(m.get('next') or '')) + '</td></tr>')
@@ -346,7 +348,8 @@ def home(everything=False):
     stray = [i for i in open_items if i.get('master') not in ids]
     synced = ts(st.get('synced_at', ''))
     run = f'running {e(RUNNING["name"])}' if RUNNING else f'{Q.qsize()} queued' if Q.qsize() else ''
-    head = (f'<header><h1>voxer-ticketsmith</h1><span class="mut">synced {ago(synced) if synced else "never"} {run}</span>'
+    fail = ' · '.join(f'<span class="bad">{e(f["name"])} failed {ago(f["at"])} (exit {e(f["rc"])}, see logs/)</span>' for f in LAST_FAIL.values())
+    head = (f'<header><h1>voxer-ticketsmith</h1><span class="mut">synced {ago(synced) if synced else "never"} {run} {fail}</span>'
             f'<button onclick="api(\'/api/sync\',{{}},this)">Sync now</button><a href="/sessions">Sessions</a><button onclick="theme()" title="light / dark">◐ theme</button></header>')
     started = [m for m in masters if kind_of(m) == 'started']
     if not st: return page('ticketsmith', head + '<p class="lead">No sync yet. The first one starts within a minute; this page refreshes when it lands.</p>')
@@ -360,7 +363,7 @@ def home(everything=False):
         urls = {m['id']: m.get('url') for m in masters}
         def needs_row(i):
             card = i.get('master') if i.get('master') in urls else 'inbox'
-            idlink = f'<a href="{e(urls[card])}" title="open in Linear">{e(card)}</a>' if card != 'inbox' else '<span class="mut">inbox</span>'
+            idlink = f'<b>{e(card)}</b> <a class="ext" href="{e(urls[card])}" title="open in Linear">Linear ↗</a>' if card != 'inbox' else '<span class="mut">inbox</span>'
             return (f'<li><div>{idlink} {e(i.get("title"))}' + (f'<div class="mut">{e(i.get("why"))}</div>' if i.get('why') else '')
                     + f'</div><a class="go" href="/t/{e(card)}#{e(i["id"])}">open →</a></li>')
         li = ''.join(needs_row(i) for i in open_items)
@@ -452,7 +455,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/sync': return self.send(200, enqueue('sync', 'sync'), 'text/plain')
         if path == '/api/action':
             item, action = str(d.get('item', '')), d.get('action')
-            if action in ('post', 'answer') and not text: return self.send(400, 'empty text', 'text/plain')
+            if action in ('post', 'answer', 'reject') and not text: return self.send(400, 'needs a reason' if action == 'reject' else 'empty text', 'text/plain')
             if not add_inbox(item, action, text): return self.send(400, 'unknown item or action', 'text/plain')
             if action == 'post': enqueue(f'post {item}', f'post {item}', write=True)
             return self.send(200, 'saved' if action == 'edit' else 'ok', 'text/plain')
@@ -497,9 +500,9 @@ def test():
     h = home()
     assert h.index('Needs you') < h.index('Ready') < h.index('In progress / Todo / blocked') < h.index('Everything else'), 'four sections in order'
     ready = h[h.index('Ready for review'):h.index('In progress / Todo')]
-    assert 'ENG-8' in ready and 'ENG-11' in ready and '#i-w">ENG-8: added the test' in ready and '>ENG-1</a>' not in ready and '>ENG-9</a>' not in ready, 'ready = work item or In Review'
+    assert 'ENG-8' in ready and 'ENG-11' in ready and '#i-w">ENG-8: added the test' in ready and '<b>ENG-1</b>' not in ready and '<b>ENG-9</b>' not in ready, 'ready = work item or In Review'
     assert 'added the test' not in h[:h.index('Ready for review')], 'work items are not Needs you'
-    assert '>ENG-12</a>' in ready and '>ENG-12</a>' not in h[h.index('Everything else'):], 'a Triage ticket with a work item is Ready, not backlog'
+    assert '<b>ENG-12</b>' in ready and '<b>ENG-12</b>' not in h[h.index('Everything else'):], 'a Triage ticket with a work item is Ready, not backlog'
     assert '⛔ blocked' in h[h.index('In progress / Todo'):h.index('Everything else')] and 'ENG-7' in h[h.index('Everything else'):]
     assert 'Needs you' in h and 'Patrick asks &lt;b&gt;' in h and 'done one' not in h, h
     assert '3 things need you. 3 ready for review, 3 in progress.' in h and '/t/ENG-1' in h and '/t/inbox' in h
@@ -517,6 +520,10 @@ def test():
     else: assert 'class="done">read' in ticket_page('ENG-8')
     assert 'Ignored today (1)' in home(everything=True) and 'Everything else' in home(everything=True)
     assert not add_inbox('i-9', 'edit', 'x') and not add_inbox('i-1', 'delete')
+    assert 'Linear ↗' in h and 'title="open in Linear">ENG-8' not in h and 'class="pri"' in ticket_page('ENG-1'), 'external links marked, Send now primary'
+    LAST_FAIL['sync'] = {'name': 'sync', 'rc': 1, 'at': time.time()}
+    assert 'sync failed' in home() and 'exit 1' in home(), 'failed run shows in the header'
+    LAST_FAIL.clear()
     assert add_inbox('i-1', 'edit', 'new text') and '>new text</textarea>' in ticket_page('ENG-1')
     st = json.loads((HOME / 'state.json').read_text())
     st['items'][0]['page'] = 'ENG-1-review.html'; st['items'][2]['page'] = '../etc/passwd'
