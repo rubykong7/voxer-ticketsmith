@@ -336,8 +336,9 @@ def row(m, items):
 
 def section(title, ms, by, note='', groups=None):
     """groups: [(subhead, [masters])] draws a subhead row before each non-empty group."""
-    rows = ''.join(f'<tr class="sub"><td colspan="4">{e(g)} <span class="mut">{len(gm)}</span></td></tr>' + ''.join(row(m, by(m['id'])) for m in gm)
-                   for g, gm in (groups or [('', ms)]) if gm)
+    gs = [(g, gm) for g, gm in (groups or [('', ms)]) if gm]
+    rows = ''.join((f'<tr class="sub"><td colspan="4">{e(g)} <span class="mut">{len(gm)}</span></td></tr>' if g and len(gs) > 1 else '') + ''.join(row(m, by(m['id'])) for m in gm)
+                   for g, gm in gs)   # subheads only when there is more than one group to tell apart
     return f'<section class="card"><h2>{e(title)} <span class="mut">{note or len(ms)}</span></h2><table>{rows}</table></section>' if ms else ''
 
 def home(everything=False):
@@ -506,6 +507,7 @@ def test():
     assert h.index('Needs you') < h.index('Ready') < h.index('>Active') < h.index('Everything else'), 'four sections in order'
     act = h[h.index('>Active'):h.index('Everything else')]
     assert act.index('In progress') < act.index('Blocked') < act.index('Todo') and '<b>ENG-9</b>' in act[act.index('Blocked'):act.index('Todo')], 'subheads group the active rows'
+    assert '<tr class="sub">' not in h[h.index('Ready for review'):h.index('>Active')], 'no subhead for a single unnamed group'
     ready = h[h.index('Ready for review'):h.index('>Active')]
     assert 'ENG-8' in ready and 'ENG-11' in ready and '#i-w">ENG-8: added the test' in ready and '<b>ENG-1</b>' not in ready and '<b>ENG-9</b>' not in ready, 'ready = work item or In Review'
     assert 'added the test' not in h[:h.index('Ready for review')], 'work items are not Needs you'
