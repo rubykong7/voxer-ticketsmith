@@ -84,11 +84,16 @@ The skill is yours: a Claude Code skill, or a wrapper around any CLI agent. The 
 |---|---|
 | Linear only | ok items come from comments on your tickets; paste a message into the thread to get a draft |
 | Slack | ok DMs, mentions and your threads become items; `slack_channels` in config.toml adds channels |
-| Voxer | ok same for Voxer threads, transcripts included; untranscribed audio is skipped |
+| Voxer | ok same for Voxer threads, transcripts included; it skips untranscribed audio |
 | Notion | ok nothing to set; pages are read when a ticket links to them |
 | Your own agent | ok a `[[commands]]` entry in config.toml routes a thread keyword to your skill |
 
-Thread requests that work as typed: shorten this draft, draft a reply to Ben, draft a sub-issue for the retry case, add the decision we made in standup, redraw the flow with the new queue.
+Thread requests that work as typed:
+- shorten this draft
+- draft a reply to Ben
+- draft a sub-issue for the retry case
+- add the decision we made in standup
+- redraw the flow with the new queue
 
 ## H Files, all in ~/.voxer-ticketsmith
 ```kv
