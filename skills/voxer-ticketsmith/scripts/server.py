@@ -196,6 +196,7 @@ async function api(path,body,el){const r=await fetch(path,{method:'POST',headers
  const t=await r.text();if(el)el.textContent=t;if(r.ok&&!el)location.reload();return r.ok}
 function val(id){return document.getElementById(id).value}
 function act(item,action,textId,el){return api('/api/action',{item,action,text:textId?val(textId):''},el)}
+function done(item,el){const r=val('r-'+item).trim();return act(item,r?'reject':'resolve',r?'r-'+item:null,el)}
 function post(item,el){if(el.dataset.armed){act(item,'post','d-'+item)}else{el.dataset.armed=1;el.textContent='Click again to post to Linear'}}
 function cp(id,b){navigator.clipboard.writeText(val(id));b.textContent='copied'}
 function dirty(){return [...document.querySelectorAll('textarea,input[type=text]')].some(t=>t.value!==t.defaultValue)||['TEXTAREA','INPUT'].includes(document.activeElement.tagName)}
@@ -234,9 +235,8 @@ def item_html(i):
                                    for o in i['options']) + '</div>')
         h.append(f'<input type="text" id="a-{iid}" placeholder="Or your own answer"><button onclick="act(\'{iid}\',\'answer\',\'a-{iid}\')">Answer</button>')
     if not i.get('pending'):
-        h.append(f'<div><button onclick="act(\'{iid}\',\'resolve\')">Resolve</button>'
-                 f'<input type="text" id="r-{iid}" placeholder="Reason to reject (it won\'t be suggested again)" style="width:60%">'
-                 f'<button onclick="act(\'{iid}\',\'reject\',\'r-{iid}\',this)">Reject</button></div>')
+        h.append(f'<div><button onclick="done(\'{iid}\',this)">Done</button>'
+                 f'<input type="text" id="r-{iid}" placeholder="Optional: why the agent should not suggest this again" style="width:60%"></div>')   # empty reason = resolve, a reason = reject
     return ''.join(h) + '</div>'
 
 def thread_html(card):
@@ -547,6 +547,7 @@ def test():
     st = json.loads((HOME / 'state.json').read_text())
     st['items'].append({'id': 'i-5', 'master': 'ENG-1', 'kind': 'result', 'title': 'ENG-3: did it', 'details': {'Where': 'a/b <x>', 'Checked': 'tests ok'}, 'command': 'cd /w && ls', 'status': 'open'})
     (HOME / 'state.json').write_text(json.dumps(st))
+    assert 'Done</button>' in ticket_page('ENG-1') and 'Reject</button>' not in ticket_page('ENG-1'), 'one button: a reason makes it a reject'
     assert 'a/b &lt;x&gt;' in ticket_page('ENG-1') and 'Copy command' in ticket_page('ENG-1') and '>cd /w &amp;&amp; ls</textarea>' in ticket_page('ENG-1')
     (HOME / 'state.json').write_text('{"half')
     assert 'ENG-8' in home(), 'half-written state.json must fall back to the last good copy'
