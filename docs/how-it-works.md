@@ -79,7 +79,18 @@ Ticket page
 ```
 The skill is yours: a Claude Code skill, or a wrapper around any CLI agent. The README section Bring your own worker has the contract and the cron line.
 
-## G Files, all in ~/.voxer-ticketsmith
+## G By tool, and what to type
+| You have | What changes |
+|---|---|
+| Linear only | ok items come from comments on your tickets; paste a message into the thread to get a draft |
+| Slack | ok DMs, mentions and your threads become items; `slack_channels` in config.toml adds channels |
+| Voxer | ok same for Voxer threads, transcripts included; untranscribed audio is skipped |
+| Notion | ok nothing to set; pages are read when a ticket links to them |
+| Your own agent | ok a `[[commands]]` entry in config.toml routes a thread keyword to your skill |
+
+Thread requests that work as typed: shorten this draft, draft a reply to Ben, draft a sub-issue for the retry case, add the decision we made in standup, redraw the flow with the new queue.
+
+## H Files, all in ~/.voxer-ticketsmith
 ```kv
 state.json: masters, items, cursors; Claude is the only writer
 inbox.jsonl: your clicks, one line each; the server is the only writer
@@ -90,7 +101,7 @@ pages/: your agent's report pages
 config.toml: workspace, inputs, slack_channels, [[commands]] for your agent
 ```
 
-## H Never
+## I Never
 ```callout warn Hard lines
 - Only Post writes to Linear. Sync, reply and your agent have no Linear write tools.
 - Slack and Voxer are read only. Replies are copy and paste.
