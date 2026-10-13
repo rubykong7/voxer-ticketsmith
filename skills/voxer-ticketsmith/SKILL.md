@@ -144,7 +144,7 @@ Run when the owner clicks Post. The only command allowed to write to Linear.
 
 Run when the owner posts in a card's thread. Read `threads/<card>.md`, the card's master in `state.json`, its items and `tasks/<card>.md`. Answer the owner's last post:
 
-- Do what they asked inside the home folder: edit a draft, add or drop an item, change steps or decisions. No writes outside the home folder.
+- Do what they asked inside the home folder: edit a draft, draft a reply to a message they point at (read it through your MCP tools; `copy` target for Slack and Voxer), add or drop an item, draft a new sub-issue as a `change` item, change steps, decisions or the diagrams in `tasks/<card>.md`. No writes outside the home folder, nothing to Linear.
 - Append your answer as `## agent · <time>` to the thread. Lead with the answer. 2-5 sentences, no preamble, no recap. Say what you changed and how you checked it, and what you did not check. If you are guessing, say so in one line.
 
 ## dashboard

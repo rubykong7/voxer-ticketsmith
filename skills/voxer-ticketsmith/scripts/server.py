@@ -244,7 +244,7 @@ def thread_html(card):
     posts = ''.join(f'<div class="post {"agent" if who == "agent" else ""}"><div class="mut">{"agent" if who == "agent" else "you"} · {e(at)}</div>{e(txt)}</div>'
                     for who, at, txt in ps)
     c = e(card)
-    return (f'{posts or "<p class=mut>No posts yet.</p>"}<textarea id="t-{c}" rows="2" placeholder="e.g. shorten the draft, drop step 2, add a sub-issue for X"></textarea>'
+    return (f'{posts or "<p class=mut>No posts yet.</p>"}<textarea id="t-{c}" rows="2" placeholder="e.g. shorten the draft, drop step 2, draft a reply to Ben, draft a sub-issue for X"></textarea>'
             f'<button class="pri" onclick="api(\'/api/reply\',{{card:\'{c}\',text:val(\'t-{c}\'),now:true}})">Send now</button>'
             f'<button onclick="api(\'/api/reply\',{{card:\'{c}\',text:val(\'t-{c}\'),now:false}})">Save for next sync</button>')
 
