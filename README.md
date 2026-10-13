@@ -80,7 +80,7 @@ Drafts are checked by `scripts/check_draft.py`: banned phrases from your style f
 
 ## Walkthrough
 
-`docs/walkthrough.html` is a one-page tour (open it in a browser). Its source is `docs/walkthrough.md`; re-render with `node skills/voxer-ticketsmith/scripts/am.mjs render docs/walkthrough.md -o docs/walkthrough.html --no-open`.
+`docs/walkthrough.html` is a one-page tour from install to your first Post. `docs/how-it-works.html` is the behaviour on one page: the sync order, what each click writes, and where your own agent fits. Open either in a browser. Sources are the `.md` files next to them; re-render with `node skills/voxer-ticketsmith/scripts/am.mjs render docs/<name>.md -o docs/<name>.html --no-open`.
 
 ## Credits
 
